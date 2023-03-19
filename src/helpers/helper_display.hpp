@@ -1,5 +1,6 @@
 #define LGFX_USE_V1
 #include <LovyanGFX.hpp>
+#include "common.hpp"
 
 class LGFX : public lgfx::LGFX_Device
  {
@@ -14,7 +15,7 @@ public:
   {
     {
       auto cfg = _bus_instance.config();
-      cfg.freq_write = 20000000;    
+      cfg.freq_write = 40000000;    
       cfg.pin_wr = 47;             
       cfg.pin_rd = -1;             
       cfg.pin_rs = 0;              
@@ -47,11 +48,11 @@ public:
       cfg.offset_rotation  =     0;
       cfg.dummy_read_pixel =     8;
       cfg.dummy_read_bits  =     1;
-      cfg.readable         =  true;
-      cfg.invert           = true;
+      cfg.readable         = false;
+      cfg.invert           =  true;
       cfg.rgb_order        = false;
       cfg.dlen_16bit       = false;
-      cfg.bus_shared       =  true;
+      cfg.bus_shared       = false;
 
       _panel_instance.config(cfg);
     }
@@ -79,7 +80,7 @@ public:
       cfg.bus_shared = true; 
       cfg.offset_rotation = 0;
 
-      cfg.i2c_port = 1;
+      cfg.i2c_port = 1;//I2C_NUM_1;
       cfg.i2c_addr = 0x38;
       cfg.pin_sda  = 6;   
       cfg.pin_scl  = 5;   

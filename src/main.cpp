@@ -1,22 +1,18 @@
-//#define LGFX_AUTODETECT // Autodetect board
-#define LGFX_USE_V1     // set to use new version of library
-//#define LV_CONF_INCLUDE_SIMPLE
-
-/* Uncomment below line to draw on screen with touch */
-//#define DRAW_ON_SCREEN
-
-#include <LovyanGFX.hpp> // main library
-//static LGFX tft; // declare display variable
-#include <lvgl.h>
-#include "lv_conf.h"
+#include <stdio.h>
+#include <string.h>
 #include <vector>
 #include "time.h"
 #include "WiFi.h"
-#include "MyDisplaySetup.h"
 #include <EEPROM.h>
-#define EEPROM_SIZE 128
-#define EEPROM_ADDR_WIFI_FLAG 0
-#define EEPROM_ADDR_WIFI_CREDENTIAL 4
+#include <LovyanGFX.hpp> // main library
+#include <lvgl.h>
+#include "lv_conf.h"
+#include "main.hpp"
+#include "common.hpp"
+#include "helpers/helper_storage.hpp"
+#include "helpers/helper_display.hpp"
+
+/*** Enum declaration ***/
 typedef enum {
   NONE,
   NETWORK_SEARCHING,
@@ -26,9 +22,22 @@ typedef enum {
 } Network_Status_t;
 Network_Status_t networkStatus = NONE;
 
-const char *ntpServer = "pool.ntp.org";
-const long gmtOffset_sec = -8 * 60 * 60;  // Set your timezone here
-const int daylightOffset_sec = 0;
+typedef enum {
+  SCREEN_ON,
+  SCREEN_OFF
+} Screen_Status_t;
+Screen_Status_t screenStatus = SCREEN_ON;
+static lv_timer_t *screenLastTouchTime = 0;
+
+//static LGFX tft;
+
+//const char *ntpServer = "ntp.nict.jp";
+//const long gmtOffset_sec = 9 * 3600L;  // Set your timezone here [Asia/Tokyo]
+//const int daylightOffset_sec = 0;
+const char * slider_brightness_prefix = "";
+const char * slider_brightness_postfix = "%";
+#define _UI_TEMPORARY_STRING_BUFFER_SIZE 32
+
 /*** Setup screen resolution for LVGL ***/
 static const uint16_t screenWidth = 480;
 static const uint16_t screenHeight = 320;
@@ -39,6 +48,7 @@ static lv_obj_t *headerLabel;
 
 static lv_style_t border_style;
 static lv_style_t popupBox_style;
+static lv_style_t custom_contents_style;
 static lv_obj_t *timeLabel;
 static lv_obj_t *settings;
 static lv_obj_t *settingBtn;
@@ -56,6 +66,13 @@ static lv_obj_t *popupBox;
 static lv_obj_t *popupBoxCloseBtn;
 static lv_timer_t *timer;
 
+//custom
+static lv_obj_t *label_temp_value;
+static lv_obj_t *label_hum_value;
+static lv_obj_t *slider_brightness;
+static lv_obj_t *label_slider_brightness_value;
+
+static int16_t tft_max_brightness_value = 0;
 static int foundNetworks = 0;
 unsigned long networkTimeout = 10 * 1000;
 String ssidName, ssidPW;
@@ -68,33 +85,6 @@ std::vector<String> foundWifiList;
 #ifdef DRAW_ON_SCREEN
 static int32_t x, y;
 #endif
-
-/*** Function declaration ***/
-void display_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p);
-void touchpad_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data);
-void tryPreviousNetwork();
-void setStyle();
-void showingFoundWiFiList();
-void loadWIFICredentialEEPROM();
-void popupMsgBox();
-void networkScanner();
-void networkConnector();
-void btn_event_cb();
-void timerForNetwork(lv_timer_t *timer);
-void btn_event_cb(lv_event_t *e);
-void updateLocalTime();
-void popupMsgBox(String title, String msg);
-void list_event_handler(lv_event_t *e);
-void beginWIFITask(void *pvParameters);
-void text_input_event_cb(lv_event_t *e);
-void buildSettings();
-void  makeKeyboard();
-void buildStatusBar();
-void  buildPWMsgBox();
-void  buildBody();
-void scanWIFITask(void *pvParameters);
-
-
 
 void setup(void)
 {
@@ -131,9 +121,8 @@ void setup(void)
   makeKeyboard();
   buildStatusBar();
   buildPWMsgBox();
-  buildBody();
+  buildCustomContents();
   buildSettings();
-
   tryPreviousNetwork();
 
 }
@@ -142,7 +131,6 @@ void loop()
 {
   lv_timer_handler(); /* let the GUI do its work */
   delay(5);
-
 }
 
   /*** Display callback to flush the buffer to screen ***/
@@ -153,32 +141,33 @@ void loop()
 
     tft.startWrite();
     tft.setAddrWindow(area->x1, area->y1, w, h);
-    tft.pushColors((uint16_t *)&color_p->full, w * h, true);
+    //tft.pushColors((uint16_t *)&color_p->full, w * h, true);
+    tft.pushPixels((uint16_t *)&color_p->full, w * h, true);
     tft.endWrite();
 
     lv_disp_flush_ready(disp);
   }
 
   /*** Touchpad callback to read the touchpad ***/
-  void touchpad_read(lv_indev_drv_t * indev_driver, lv_indev_data_t * data)
+void touchpad_read(lv_indev_drv_t * indev_driver, lv_indev_data_t * data)
+{
+  uint16_t touchX, touchY;
+  bool touched = tft.getTouch(&touchX, &touchY);
+
+  if (!touched)
   {
-    uint16_t touchX, touchY;
-    bool touched = tft.getTouch(&touchX, &touchY);
+    data->state = LV_INDEV_STATE_REL;
+  }
+  else
+  {
+    data->state = LV_INDEV_STATE_PR;
 
-    if (!touched)
-    {
-      data->state = LV_INDEV_STATE_REL;
-    }
-    else
-    {
-      data->state = LV_INDEV_STATE_PR;
+    /*Set the coordinates*/
+    data->point.x = touchX;
+    data->point.y = touchY;
 
-      /*Set the coordinates*/
-      data->point.x = touchX;
-      data->point.y = touchY;
-
-      // Serial.printf("Touch (x,y): (%03d,%03d)\n",touchX,touchY );
-    }
+    // Serial.printf("Touch (x,y): (%03d,%03d)\n",touchX,touchY );
+  }
 }
 
 
@@ -192,10 +181,35 @@ void tryPreviousNetwork() {
   loadWIFICredentialEEPROM();
 }
 
+void tryTFCard() {
+  #ifdef SD_SUPPORTED
+    // Initializing SDSPI 
+    loadTFCard();
+  #endif
+}
+
 void saveWIFICredentialEEPROM(int flag, String ssidpw) {
   EEPROM.writeInt(EEPROM_ADDR_WIFI_FLAG, flag);
   EEPROM.writeString(EEPROM_ADDR_WIFI_CREDENTIAL, flag == 1 ? ssidpw : "");
   EEPROM.commit();
+}
+
+void loadTFCard() {
+  switch(tfcardStatus) {
+
+    case TFCARD_UNMOUNT:
+      if (init_sdspi() == ESP_OK) {
+        tfcardStatus = TFCARD_MOUNTED;
+      }
+      break;
+
+    // case TFCARD_MOUNTED:
+    //   sdcard.
+    //   break;
+
+    // default:
+    //   break;
+  }
 }
 
 void loadWIFICredentialEEPROM() {
@@ -209,7 +223,7 @@ void loadWIFICredentialEEPROM() {
       lv_obj_add_state(settingWiFiSwitch, LV_STATE_CHECKED);
       lv_event_send(settingWiFiSwitch, LV_EVENT_VALUE_CHANGED, NULL);
 
-      popupMsgBox("Welcome Back!", "Attempts to reconnect to the previously connected network.");
+      //popupMsgBox("Welcome Back!", "Attempts to reconnect to the previously connected network.");
       ssidName = String(preSSIDName);
       ssidPW = String(preSSIDPw);
       networkConnector();
@@ -219,7 +233,7 @@ void loadWIFICredentialEEPROM() {
   }
 }
 
- void setStyle() {
+void setStyle() {
   lv_style_init(&border_style);
   lv_style_set_border_width(&border_style, 2);
   lv_style_set_border_color(&border_style, lv_color_black());
@@ -229,6 +243,12 @@ void loadWIFICredentialEEPROM() {
   lv_style_set_bg_opa(&popupBox_style, LV_OPA_COVER);
   lv_style_set_border_color(&popupBox_style, lv_palette_main(LV_PALETTE_BLUE));
   lv_style_set_border_width(&popupBox_style, 5);
+
+  // custom font used.
+  lv_style_init(&custom_contents_style);
+  lv_style_set_border_width(&custom_contents_style, 2);
+  lv_style_set_border_color(&custom_contents_style, lv_color_black());
+  lv_style_set_text_font(&custom_contents_style, &lv_font_notosansjp_regular_custom_16_2);
 }
 
  void buildStatusBar() {
@@ -311,6 +331,31 @@ void loadWIFICredentialEEPROM() {
     }
   }
 }
+void slider_event_brightness(lv_event_t *e) {
+  lv_event_code_t code = lv_event_get_code(e);
+  lv_obj_t * target = lv_event_get_target(e);
+  if(code == LV_EVENT_VALUE_CHANGED) {
+    int16_t val1 = lv_slider_get_value(target);
+    set_slider_text_value(label_slider_brightness_value, val1, (char *)slider_brightness_prefix, (char *)slider_brightness_postfix);
+    //tft.setBrightness((uint8_t)val);
+    char buf1[8];
+    lv_snprintf(buf1, sizeof(buf1), "%d", (int)tft_max_brightness_value);
+    lv_label_set_text(label_temp_value, (const char *)buf1);
+    int16_t val2 =  int16_t(((int)tft_max_brightness_value * 100 * (int)val1) / 10000);
+    char buf2[8];
+    lv_snprintf(buf2, sizeof(buf2), "%d", val2);
+    lv_label_set_text(label_hum_value, buf2);
+    //set_slider_text_value(label_hum_value, val2, (char *)slider_brightness_prefix, (char *)slider_brightness_prefix);
+    tft.setBrightness((uint8_t)val2);
+  }
+}
+
+void set_slider_text_value(lv_obj_t * trg, int16_t val, char * prefix, char * postfix)
+{
+    char buf[_UI_TEMPORARY_STRING_BUFFER_SIZE];
+    lv_snprintf(buf, sizeof(buf), "%s%d%s", prefix, (int)val, postfix);
+    lv_label_set_text(trg, buf);
+}
 
 void timerForNetwork(lv_timer_t *timer) {
   LV_UNUSED(timer);
@@ -322,9 +367,9 @@ void timerForNetwork(lv_timer_t *timer) {
       break;
 
     case NETWORK_CONNECTED_POPUP:
-      popupMsgBox("WiFi Connected!", "Now you'll get the current time soon.");
+      //popupMsgBox("WiFi Connected!", "Now you'll get the current time soon.");
       networkStatus = NETWORK_CONNECTED;
-      configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+      configTime(NTP_GMT_OFFSET_SEC, NTP_DAYLIGHT_OFFSET_SEC, NTP_SERVER_NAME1, NTP_SERVER_NAME2, NTP_SERVER_NAME3);
       break;
 
     case NETWORK_CONNECTED:
@@ -359,16 +404,124 @@ void showingFoundWiFiList() {
   foundNetworks = foundWifiList.size();
 }
 
+lv_obj_t * lv_label_create_custom(lv_obj_t * parent, lv_align_t align, lv_coord_t x, lv_coord_t y, const char * text) {  
+  lv_obj_t *labelCustom = lv_label_create(parent);
+  lv_obj_set_align(labelCustom, align);
+  lv_obj_set_x(labelCustom, x);
+  lv_obj_set_y(labelCustom, y);
+  lv_label_set_text(labelCustom, text);
+  return labelCustom;
+}
 
-void buildBody() {
+lv_obj_t * lv_slider_create_custom(lv_obj_t * parent, lv_align_t align, lv_coord_t x, lv_coord_t y, lv_coord_t w, lv_coord_t h, int32_t value) {
+  lv_obj_t *sliderCustom = lv_label_create(parent);
+  lv_obj_set_align(sliderCustom, align);
+  lv_obj_set_width(sliderCustom, w);
+  lv_obj_set_height(sliderCustom, h);
+  lv_obj_set_x(sliderCustom, x);
+  lv_obj_set_y(sliderCustom, y);
+  lv_slider_set_value(slider_brightness, value, LV_ANIM_OFF);
+  return sliderCustom;
+}
+
+void buildCustomContents() {
+  // Make Body Area
   lv_obj_t *bodyScreen = lv_obj_create(lv_scr_act());
-  lv_obj_add_style(bodyScreen, &border_style, 0);
+  lv_obj_add_style(bodyScreen, &custom_contents_style, 0);
   lv_obj_set_size(bodyScreen, tft.width(), tft.height() - 34);
   lv_obj_align(bodyScreen, LV_ALIGN_BOTTOM_MID, 0, 0);
 
-  lv_obj_t *label = lv_label_create(bodyScreen);
-  lv_label_set_text(label, "Your Contents");
-  lv_obj_center(label);
+  // Label1
+  //lv_obj_t *label1 = lv_label_create_custom(bodyScreen, LV_ALIGN_CENTER, 0, -35 * 3, "WT32 SC01 PLUS Sample App Test");
+  lv_obj_t *label1 = lv_label_create(bodyScreen);
+  lv_obj_set_x(label1, 0);
+  lv_obj_set_y(label1, -35 * 3);
+  lv_obj_set_align(label1, LV_ALIGN_CENTER);
+  lv_label_set_text(label1, "WT32 SC01 PLUS Sample App Test");
+
+  // MaxBRT
+  //lv_obj_t *label_temp = lv_label_create_custom(bodyScreen, LV_ALIGN_CENTER, -35, -35 * 2, "MaxBRT:");
+  //label_temp_value = lv_label_create_custom(bodyScreen, LV_ALIGN_CENTER, 35, 35 * 2, "-");
+  lv_obj_t *label_temp = lv_label_create(bodyScreen);
+  lv_obj_set_x(label_temp, -35);
+  lv_obj_set_y(label_temp, -35 * 2);
+  lv_obj_set_align(label_temp, LV_ALIGN_CENTER);
+  lv_label_set_text(label_temp, "MaxBRT:");
+  label_temp_value = lv_label_create(bodyScreen);
+  lv_obj_set_x(label_temp_value, 35);
+  lv_obj_set_y(label_temp_value, -35 * 2);
+  lv_obj_set_align(label_temp_value, LV_ALIGN_CENTER);
+  lv_label_set_text(label_temp_value, "-");
+
+  // NowBRT：
+  //lv_obj_t *label_hum = lv_label_create_custom(bodyScreen, LV_ALIGN_CENTER, -35, -35 * 1, "MaxBRT:");
+  //label_hum_value = lv_label_create_custom(bodyScreen, LV_ALIGN_CENTER, 35, 35 * 1, "-");
+  lv_obj_t *label_hum = lv_label_create(bodyScreen);
+  lv_obj_set_x(label_hum, -35);
+  lv_obj_set_y(label_hum, -35 * 1);
+  lv_obj_set_align(label_hum, LV_ALIGN_CENTER);
+  lv_label_set_text(label_hum, "NowBRT:");
+  label_hum_value = lv_label_create(bodyScreen);
+  lv_obj_set_x(label_hum_value, 35);
+  lv_obj_set_y(label_hum_value, -35 * 1);
+  lv_obj_set_align(label_hum_value, LV_ALIGN_CENTER);
+  lv_label_set_text(label_hum_value, "-");
+
+  // Slider BRT
+  //slider_brightness = lv_slider_create_custom(bodyScreen, LV_ALIGN_CENTER, 0, 0, 200, 20, 100);
+  //label_slider_brightness_value = lv_label_create_custom(bodyScreen, LV_ALIGN_CENTER, 150, 0, "100%");
+  slider_brightness = lv_slider_create(bodyScreen);
+  lv_obj_set_width(slider_brightness, 200);
+  lv_obj_set_height(slider_brightness, 20);
+  lv_obj_set_x(slider_brightness, 0);
+  lv_obj_set_y(slider_brightness, 0);
+  lv_obj_set_align(slider_brightness, LV_ALIGN_CENTER);
+  lv_slider_set_value(slider_brightness, 100, LV_ANIM_OFF);//100%
+  label_slider_brightness_value = lv_label_create(bodyScreen);
+  lv_obj_set_x(label_slider_brightness_value, 150);
+  lv_obj_set_y(label_slider_brightness_value, 0);
+  lv_obj_set_align(label_slider_brightness_value, LV_ALIGN_CENTER);
+  lv_label_set_text(label_slider_brightness_value, "100%");
+  lv_obj_add_event_cb(slider_brightness, slider_event_brightness, LV_EVENT_ALL, NULL);
+
+  // SDCard Test Button
+  int btn_x1 = -120;
+  int btn_x2 = btn_x1 - (-80 * 1);
+  int btn_x3 = btn_x1 - (-80 * 2);
+  int btn_x4 = btn_x1 - (-80 * 3);
+  int btn_y = 35 * 2;
+  lv_obj_t *button_sd_test1 = lv_btn_create(bodyScreen);
+  lv_obj_align(button_sd_test1, LV_ALIGN_CENTER, btn_x1, btn_y);
+  lv_obj_set_size(button_sd_test1, LV_SIZE_CONTENT, 35);
+  lv_obj_t *button_label1 = lv_label_create(button_sd_test1);
+  lv_label_set_text(button_label1, "  1  ");
+  lv_obj_center(button_label1);
+  lv_obj_add_event_cb(button_sd_test1, button1_event_handler, LV_EVENT_ALL, NULL);
+
+  lv_obj_t *button_sd_test2 = lv_btn_create(bodyScreen);
+  lv_obj_align(button_sd_test2, LV_ALIGN_CENTER, btn_x2, btn_y);
+  lv_obj_set_size(button_sd_test2, LV_SIZE_CONTENT, 35);
+  lv_obj_t *button_label2 = lv_label_create(button_sd_test2);
+  lv_label_set_text(button_label2, "  2  ");
+  lv_obj_center(button_label2);
+  lv_obj_add_event_cb(button_sd_test2, button2_event_handler, LV_EVENT_ALL, NULL);
+
+  lv_obj_t *button_sd_test3 = lv_btn_create(bodyScreen);
+  lv_obj_align(button_sd_test3, LV_ALIGN_CENTER, btn_x3, btn_y);
+  lv_obj_set_size(button_sd_test3, LV_SIZE_CONTENT, 35);
+  lv_obj_t *button_label3 = lv_label_create(button_sd_test3);
+  lv_label_set_text(button_label3, "  3  ");
+  lv_obj_center(button_label3);
+  lv_obj_add_event_cb(button_sd_test3, button3_event_handler, LV_EVENT_ALL, NULL);
+
+  lv_obj_t *button_sd_test4 = lv_btn_create(bodyScreen);
+  lv_obj_align(button_sd_test4, LV_ALIGN_CENTER, btn_x4, btn_y);
+  lv_obj_set_size(button_sd_test4, LV_SIZE_CONTENT, 35);
+  lv_obj_t *button_label4 = lv_label_create(button_sd_test4);
+  lv_label_set_text(button_label4, "  4  ");
+  lv_obj_center(button_label4);
+  lv_obj_add_event_cb(button_sd_test4, button4_event_handler, LV_EVENT_ALL, NULL);
+
 }
 
 void buildSettings() {
@@ -397,6 +550,22 @@ void buildSettings() {
   wfList = lv_list_create(settings);
   lv_obj_set_size(wfList, tft.width() - 140, 210);
   lv_obj_align_to(wfList, settinglabel, LV_ALIGN_TOP_LEFT, 0, 30);
+
+  // Set MaxBRT
+  tft_max_brightness_value = tft.getBrightness();
+}
+
+void button1_event_handler(lv_event_t *e) {
+
+}
+void button2_event_handler(lv_event_t *e) {
+
+}
+void button3_event_handler(lv_event_t *e) {
+
+}
+void button4_event_handler(lv_event_t *e) {
+
 }
 
 void list_event_handler(lv_event_t *e) {
@@ -571,5 +740,11 @@ void updateLocalTime() {
   String hourMinWithSymbol = String(hourMin);
   hourMinWithSymbol += "   ";
   hourMinWithSymbol += LV_SYMBOL_WIFI;
+  if (tfcardStatus == TFCARD_MOUNTED) {
+    hourMinWithSymbol += "   ";
+    hourMinWithSymbol += LV_SYMBOL_SD_CARD;
+  }
   lv_label_set_text(timeLabel, hourMinWithSymbol.c_str());
 }
+
+
