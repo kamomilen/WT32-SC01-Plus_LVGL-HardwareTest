@@ -6,46 +6,11 @@
 #include "common.hpp"
 #include "helpers/helper_speaker.hpp"
 
-typedef struct beepParameters {
-    int rate;
-    int freq;
-    int maxval;
-    size_t time;
-    // beepParameters() :rate(44100),freq(2000),maxval(10000),time(500){}
-    // beepParameters(int rate,int freq,int maxval,size_t time)
-    // :rate(rate),freq(freq),maxval(maxval),time(time){}
-} beepParameters_t;
+static i2s_port_t a_i2s_port_t = I2S_NUM_1;
+const char *TAG_SP = "speaker";
 
-typedef struct {
-    void *pAudioData;
-    int length;
-    bool freeFlag;
-} audioParameters_t;
-
-enum playType {
-    kTypeNull = 0,
-    kTypeAudio,
-    kTypeBeep,
-};
-
-typedef struct {
-    int type;
-    void *dataptr;
-} i2sQueueMsg_t;
-
-typedef struct audioList {
-    size_t _num;
-    int type;
-    void *dataptr;
-    audioList *nextPtr;
-} audioList_t;
-
-static i2s_port_t a_i2s_port_t = I2S_NUM_0;
-void speaker_init() {
-    if (speakerStatus == Speaker_READY) {
-        i2s_driver_uninstall(a_i2s_port_t);
-        speakerStatus = Speaker_NONE;
-    }
+esp_err_t speaker_init() {
+    esp_err_t ret;
 
     i2s_pin_config_t pin_config = {
         .bck_io_num   = A_BCLK,
@@ -67,19 +32,37 @@ void speaker_init() {
         .tx_desc_auto_clear   = true                         // I2S auto clear tx descriptor if there is underflow condition
     };
 
-    i2s_driver_install(a_i2s_port_t, &i2s_config, 0, NULL);
-    i2s_set_pin(a_i2s_port_t, &pin_config);
-    i2s_set_clk(a_i2s_port_t, i2s_config.sample_rate, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_MONO);
+    ret = i2s_driver_install(a_i2s_port_t, &i2s_config, 0, NULL);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG_SP, "Failed to i2s_driver_install (%s, pin=%d)", esp_err_to_name(ret), a_i2s_port_t);
+        return ESP_FAIL;
+    }
+    ret = i2s_set_pin(a_i2s_port_t, &pin_config);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG_SP, "Failed to i2s_set_pin (%s, pin=%d)", esp_err_to_name(ret), a_i2s_port_t);
+        return ESP_FAIL;
+    }
+    ret = i2s_set_clk(a_i2s_port_t, i2s_config.sample_rate, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_MONO);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG_SP, "Failed to i2s_set_clk (%s, rate=%d, channel=%d)", esp_err_to_name(ret), I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_MONO);
+        return ESP_FAIL;
+    }
 
-    speakerStatus = Speaker_READY;
+    return ESP_OK;
+}
+
+esp_err_t speaker_unload() {
+    esp_err_t ret;
+    ret = i2s_driver_uninstall(a_i2s_port_t);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG_SP, "Failed to i2s_driver_uninstall (%s)", esp_err_to_name(ret));
+        return ESP_FAIL;
+    }
+    return ESP_OK;
 }
 
 size_t playBeep(int __freq, int __timems, int __maxval, bool __modal) {
     size_t writeSize = 0;
-
-    if (speakerStatus != Speaker_READY) {
-        return -1;
-    }
 
     // if (__modal == false) {
     //     beepParameters_t *pam =
@@ -132,6 +115,7 @@ size_t playBeep(int __freq, int __timems, int __maxval, bool __modal) {
     // }
     return writeSize;
 }
+
 // From http://stackoverflow.com/questions/6091837/sin-and-cos-are-slow-is-there-an-alternatve
 float fastSin(float theta) {
     auto B = 4.0f / M_PI;
@@ -141,7 +125,3 @@ float fastSin(float theta) {
     auto y = (B  + C * theta) * theta;
     return P * (y * std::abs(y) - y) + y;
 }
-
-// void speaker_beep() {
-//     i2s_write(Speak_I2S_NUMBER, buff, DATA_SIZE, &bytes_written, portMAX_DELAY);
-// }
