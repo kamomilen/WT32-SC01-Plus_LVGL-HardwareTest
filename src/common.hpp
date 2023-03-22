@@ -5,6 +5,7 @@
 // SD card Working / enable it below
 #define WT32_SC01_PLUS
 #define SD_SUPPORTED
+#define SOC_I2S_SUPPORTS_ADC
 
 // SD CARD - SPI
 #define SDSPI_HOST_ID SPI3_HOST
@@ -18,6 +19,19 @@
 #define A_LRCK        GPIO_NUM_35
 #define A_BCLK        GPIO_NUM_36
 #define A_DOUT        GPIO_NUM_37
+
+// RS485
+#define RS485_RXD     GPIO_NUM_1
+#define RS485_RTS     GPIO_NUM_2
+#define RS485_TXD     GPIO_NUM_42
+
+// EXT 8Pin (0-3.3V)
+#define EXT_01        GPIO_NUM_10
+#define EXT_02        GPIO_NUM_11
+#define EXT_03        GPIO_NUM_12
+#define EXT_04        GPIO_NUM_13
+#define EXT_05        GPIO_NUM_14
+#define EXT_06        GPIO_NUM_21
 
 // EEPROM
 #define EEPROM_SIZE 128

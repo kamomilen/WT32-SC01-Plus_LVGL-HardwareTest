@@ -13,7 +13,7 @@
 
 static sdmmc_host_t sdmmc_host;
 static sdmmc_card_t* sdcard;
-static const char *TAG = "sdcard";
+const char *TAG = "sdcard";
 
 esp_err_t _SD_Mount()
 {
@@ -88,7 +88,7 @@ esp_err_t _SD_Unmount() {
 }
 
 // SDCard File Write
-esp_err_t _SD_WriteFile(const char *path, char *data)
+esp_err_t _SD_WriteFile(const char *path, std::string data)
 {
     ESP_LOGI(TAG, "Opening file %s", path);
     FILE *f = fopen(path, "w");
@@ -96,7 +96,7 @@ esp_err_t _SD_WriteFile(const char *path, char *data)
         ESP_LOGE(TAG, "Failed to open file for writing");
         return ESP_FAIL;
     }
-    fprintf(f, data);
+    fprintf(f, data.c_str());
     fclose(f);
     ESP_LOGI(TAG, "File written");
 
@@ -104,31 +104,28 @@ esp_err_t _SD_WriteFile(const char *path, char *data)
 }
 
 // SDCard File Read
-esp_err_t _SD_ReadFile(const char *path, char *data)
+esp_err_t _SD_ReadFile(const char *path, std::string *data)
 {
+    std::string str;
+    char buffer[READ_MAX_CHAR_SIZE];
     ESP_LOGI(TAG, "Reading file %s", path);
-    FILE *f = fopen(path, "r");
-    if (f == NULL) {
+    FILE *fp = fopen(path, "r");
+    if (fp == NULL) {
         ESP_LOGE(TAG, "Failed to open file for reading");
         return ESP_FAIL;
     }
 
-    fgets(data, sizeof(READ_MAX_CHAR_SIZE), f);
-    fclose(f);
-
-    // // strip newline
-    // char *pos = strchr(data, '\n');
-    // if (pos) {
-    //     *pos = '\0';
-    // }
-    // ESP_LOGI(TAG, "Read from file: '%s'", data);
-    // printf("_SD_ReadFile line:");
-    // printf(data);
-    // printf("\n");
-    //*data = *line;
-    // printf("_SD_ReadFile data:");
-    // printf(*data);
-    // printf("\n");
+    while(fgets(buffer, READ_MAX_CHAR_SIZE, fp) != NULL) {
+        if(*buffer && buffer[strlen(buffer) - 1] == '\n'){
+            buffer[strlen(buffer) - 1] = 0;
+            str += buffer;
+            str += "\n";
+        } else {
+            str += buffer;
+        }
+    }
+    fclose(fp);
+    *data = str.c_str();
 
     return ESP_OK;
 }
