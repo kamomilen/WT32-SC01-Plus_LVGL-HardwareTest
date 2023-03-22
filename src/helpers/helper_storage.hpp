@@ -5,20 +5,22 @@
 #include <esp_vfs_fat.h>
 #include <sdmmc_cmd.h>
 
-bool init_sdspi();
-bool _SD_Unmount();
-void _SD_FileCreate();
-void _SDS_RenameFile();
-bool isFileExists();
-bool _SDS_Format_FATFS();
-bool _SDS_RemoveFile();
-esp_err_t _SDS_write_file(const char *path, char *data);
-esp_err_t _SDS_read_file(const char *path);
+#define MOUNT_POINT "/sdcard"
+#define READ_MAX_CHAR_SIZE    256
+
+esp_err_t _SD_Mount();
+esp_err_t _SD_Unmount();
+esp_err_t _SD_IsFileExists(const char * file_path);
+esp_err_t _SD_Format_FATFS();
+esp_err_t _SD_RemoveFile(const char *file_from, const char *file_to);
+esp_err_t _SD_WriteFile(const char *path, char *data);
+esp_err_t _SD_ReadFile(const char *path, char *data);
+esp_err_t _SD_DeleteFile(const char *path);
 esp_err_t esp_vfs_fat_sdcard_format(const char *base_path, sdmmc_card_t *card);
 
 typedef enum {
   TFCARD_UNMOUNT,
   TFCARD_MOUNTED,
 } TFCard_Status_t;
-static TFCard_Status_t tfcardStatus = TFCARD_UNMOUNT;
+
 

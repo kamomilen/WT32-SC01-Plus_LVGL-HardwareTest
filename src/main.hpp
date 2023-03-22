@@ -37,7 +37,6 @@ void buildPWMsgBox();
 void buildCustomContents();
 void scanWIFITask(void *pvParameters);
 void set_slider_text_value(lv_obj_t * trg, int16_t val, char * prefix, char * postfix);
-void tryTFCard();
 void loadTFCard();
 
 

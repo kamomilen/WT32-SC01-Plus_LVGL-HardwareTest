@@ -10,6 +10,7 @@
 #include "main.hpp"
 #include "common.hpp"
 #include "helpers/helper_storage.hpp"
+#include "helpers/helper_speaker.hpp"
 #include "helpers/helper_display.hpp"
 
 /*** Enum declaration ***/
@@ -23,11 +24,14 @@ typedef enum {
 Network_Status_t networkStatus = NONE;
 
 typedef enum {
-  SCREEN_ON,
+  SCREEN_ON_BRT_RESTRICT,
+  SCREEN_ON_BRT_MAX,
   SCREEN_OFF
 } Screen_Status_t;
-Screen_Status_t screenStatus = SCREEN_ON;
+Screen_Status_t screenStatus = SCREEN_ON_BRT_MAX;
 static lv_timer_t *screenLastTouchTime = 0;
+
+static TFCard_Status_t tfcardStatus = TFCARD_UNMOUNT;
 
 //static LGFX tft;
 
@@ -67,10 +71,11 @@ static lv_obj_t *popupBoxCloseBtn;
 static lv_timer_t *timer;
 
 //custom
-static lv_obj_t *label_temp_value;
-static lv_obj_t *label_hum_value;
+static lv_obj_t *label_brt_value;
+//static lv_obj_t *label_hum_value;
 static lv_obj_t *slider_brightness;
 static lv_obj_t *label_slider_brightness_value;
+static lv_obj_t *label_exec_msg;
 
 static int16_t tft_max_brightness_value = 0;
 static int foundNetworks = 0;
@@ -181,13 +186,6 @@ void tryPreviousNetwork() {
   loadWIFICredentialEEPROM();
 }
 
-void tryTFCard() {
-  #ifdef SD_SUPPORTED
-    // Initializing SDSPI 
-    loadTFCard();
-  #endif
-}
-
 void saveWIFICredentialEEPROM(int flag, String ssidpw) {
   EEPROM.writeInt(EEPROM_ADDR_WIFI_FLAG, flag);
   EEPROM.writeString(EEPROM_ADDR_WIFI_CREDENTIAL, flag == 1 ? ssidpw : "");
@@ -196,19 +194,19 @@ void saveWIFICredentialEEPROM(int flag, String ssidpw) {
 
 void loadTFCard() {
   switch(tfcardStatus) {
-
     case TFCARD_UNMOUNT:
-      if (init_sdspi() == ESP_OK) {
-        tfcardStatus = TFCARD_MOUNTED;
-      }
+      _SD_Mount();
+      tfcardStatus = TFCARD_MOUNTED;
       break;
+  }
+}
 
-    // case TFCARD_MOUNTED:
-    //   sdcard.
-    //   break;
-
-    // default:
-    //   break;
+void unloadTFCard() {
+  switch(tfcardStatus) {
+    case TFCARD_MOUNTED:
+      _SD_Unmount();
+      tfcardStatus = TFCARD_UNMOUNT;
+      break;
   }
 }
 
@@ -336,17 +334,16 @@ void slider_event_brightness(lv_event_t *e) {
   lv_obj_t * target = lv_event_get_target(e);
   if(code == LV_EVENT_VALUE_CHANGED) {
     int16_t val1 = lv_slider_get_value(target);
-    set_slider_text_value(label_slider_brightness_value, val1, (char *)slider_brightness_prefix, (char *)slider_brightness_postfix);
+    int16_t val2 =  int16_t(((int)tft_max_brightness_value * 100 * (int)val1) / 10000);
+    tft.setBrightness((uint8_t)val2);
     //tft.setBrightness((uint8_t)val);
     char buf1[8];
-    lv_snprintf(buf1, sizeof(buf1), "%d", (int)tft_max_brightness_value);
-    lv_label_set_text(label_temp_value, (const char *)buf1);
-    int16_t val2 =  int16_t(((int)tft_max_brightness_value * 100 * (int)val1) / 10000);
-    char buf2[8];
-    lv_snprintf(buf2, sizeof(buf2), "%d", val2);
-    lv_label_set_text(label_hum_value, buf2);
-    //set_slider_text_value(label_hum_value, val2, (char *)slider_brightness_prefix, (char *)slider_brightness_prefix);
-    tft.setBrightness((uint8_t)val2);
+    lv_snprintf(buf1, sizeof(buf1), "%d/%d", (int)val2, (int)tft_max_brightness_value);
+    lv_label_set_text(label_brt_value, (const char *)buf1);
+    set_slider_text_value(label_slider_brightness_value, val1, (char *)slider_brightness_prefix, (char *)slider_brightness_postfix);
+    // char buf2[8];
+    // lv_snprintf(buf2, sizeof(buf2), "%d", val2);
+    // lv_label_set_text(label_hum_value, buf2);
   }
 }
 
@@ -446,26 +443,26 @@ void buildCustomContents() {
   lv_obj_set_x(label_temp, -35);
   lv_obj_set_y(label_temp, -35 * 2);
   lv_obj_set_align(label_temp, LV_ALIGN_CENTER);
-  lv_label_set_text(label_temp, "MaxBRT:");
-  label_temp_value = lv_label_create(bodyScreen);
-  lv_obj_set_x(label_temp_value, 35);
-  lv_obj_set_y(label_temp_value, -35 * 2);
-  lv_obj_set_align(label_temp_value, LV_ALIGN_CENTER);
-  lv_label_set_text(label_temp_value, "-");
+  lv_label_set_text(label_temp, "BRT:");
+  label_brt_value = lv_label_create(bodyScreen);
+  lv_obj_set_x(label_brt_value, 35);
+  lv_obj_set_y(label_brt_value, -35 * 2);
+  lv_obj_set_align(label_brt_value, LV_ALIGN_CENTER);
+  lv_label_set_text(label_brt_value, "-");
 
   // NowBRT：
   //lv_obj_t *label_hum = lv_label_create_custom(bodyScreen, LV_ALIGN_CENTER, -35, -35 * 1, "MaxBRT:");
   //label_hum_value = lv_label_create_custom(bodyScreen, LV_ALIGN_CENTER, 35, 35 * 1, "-");
-  lv_obj_t *label_hum = lv_label_create(bodyScreen);
-  lv_obj_set_x(label_hum, -35);
-  lv_obj_set_y(label_hum, -35 * 1);
-  lv_obj_set_align(label_hum, LV_ALIGN_CENTER);
-  lv_label_set_text(label_hum, "NowBRT:");
-  label_hum_value = lv_label_create(bodyScreen);
-  lv_obj_set_x(label_hum_value, 35);
-  lv_obj_set_y(label_hum_value, -35 * 1);
-  lv_obj_set_align(label_hum_value, LV_ALIGN_CENTER);
-  lv_label_set_text(label_hum_value, "-");
+  // lv_obj_t *label_hum = lv_label_create(bodyScreen);
+  // lv_obj_set_x(label_hum, -35);
+  // lv_obj_set_y(label_hum, -35 * 1);
+  // lv_obj_set_align(label_hum, LV_ALIGN_CENTER);
+  // lv_label_set_text(label_hum, "NowBRT:");
+  // label_hum_value = lv_label_create(bodyScreen);
+  // lv_obj_set_x(label_hum_value, 35);
+  // lv_obj_set_y(label_hum_value, -35 * 1);
+  // lv_obj_set_align(label_hum_value, LV_ALIGN_CENTER);
+  // lv_label_set_text(label_hum_value, "-");
 
   // Slider BRT
   //slider_brightness = lv_slider_create_custom(bodyScreen, LV_ALIGN_CENTER, 0, 0, 200, 20, 100);
@@ -474,54 +471,61 @@ void buildCustomContents() {
   lv_obj_set_width(slider_brightness, 200);
   lv_obj_set_height(slider_brightness, 20);
   lv_obj_set_x(slider_brightness, 0);
-  lv_obj_set_y(slider_brightness, 0);
+  lv_obj_set_y(slider_brightness, -35 * 1);
   lv_obj_set_align(slider_brightness, LV_ALIGN_CENTER);
   lv_slider_set_value(slider_brightness, 100, LV_ANIM_OFF);//100%
   label_slider_brightness_value = lv_label_create(bodyScreen);
   lv_obj_set_x(label_slider_brightness_value, 150);
-  lv_obj_set_y(label_slider_brightness_value, 0);
+  lv_obj_set_y(label_slider_brightness_value, -35 * 1);
   lv_obj_set_align(label_slider_brightness_value, LV_ALIGN_CENTER);
   lv_label_set_text(label_slider_brightness_value, "100%");
   lv_obj_add_event_cb(slider_brightness, slider_event_brightness, LV_EVENT_ALL, NULL);
 
   // SDCard Test Button
-  int btn_x1 = -120;
-  int btn_x2 = btn_x1 - (-80 * 1);
-  int btn_x3 = btn_x1 - (-80 * 2);
-  int btn_x4 = btn_x1 - (-80 * 3);
-  int btn_y = 35 * 2;
+  int btn_x1 = -135;
+  int btn_x2 = btn_x1 - (-90 * 1);
+  int btn_x3 = btn_x1 - (-90 * 2);
+  int btn_x4 = btn_x1 - (-90 * 3);
+  int btn_y1 = 35 * 1;
+  int btn_y2 = 35 * 2;
+  int btn_y3 = 35 * 3;
   lv_obj_t *button_sd_test1 = lv_btn_create(bodyScreen);
-  lv_obj_align(button_sd_test1, LV_ALIGN_CENTER, btn_x1, btn_y);
+  lv_obj_align(button_sd_test1, LV_ALIGN_CENTER, btn_x1, btn_y1);
   lv_obj_set_size(button_sd_test1, LV_SIZE_CONTENT, 35);
   lv_obj_t *button_label1 = lv_label_create(button_sd_test1);
-  lv_label_set_text(button_label1, "  1  ");
+  lv_label_set_text(button_label1, "SD Test");
   lv_obj_center(button_label1);
   lv_obj_add_event_cb(button_sd_test1, button1_event_handler, LV_EVENT_ALL, NULL);
 
   lv_obj_t *button_sd_test2 = lv_btn_create(bodyScreen);
-  lv_obj_align(button_sd_test2, LV_ALIGN_CENTER, btn_x2, btn_y);
+  lv_obj_align(button_sd_test2, LV_ALIGN_CENTER, btn_x2, btn_y1);
   lv_obj_set_size(button_sd_test2, LV_SIZE_CONTENT, 35);
   lv_obj_t *button_label2 = lv_label_create(button_sd_test2);
-  lv_label_set_text(button_label2, "  2  ");
+  lv_label_set_text(button_label2, "SPK Test");
   lv_obj_center(button_label2);
   lv_obj_add_event_cb(button_sd_test2, button2_event_handler, LV_EVENT_ALL, NULL);
 
   lv_obj_t *button_sd_test3 = lv_btn_create(bodyScreen);
-  lv_obj_align(button_sd_test3, LV_ALIGN_CENTER, btn_x3, btn_y);
+  lv_obj_align(button_sd_test3, LV_ALIGN_CENTER, btn_x3, btn_y1);
   lv_obj_set_size(button_sd_test3, LV_SIZE_CONTENT, 35);
   lv_obj_t *button_label3 = lv_label_create(button_sd_test3);
-  lv_label_set_text(button_label3, "  3  ");
+  lv_label_set_text(button_label3, "  -  ");
   lv_obj_center(button_label3);
   lv_obj_add_event_cb(button_sd_test3, button3_event_handler, LV_EVENT_ALL, NULL);
 
   lv_obj_t *button_sd_test4 = lv_btn_create(bodyScreen);
-  lv_obj_align(button_sd_test4, LV_ALIGN_CENTER, btn_x4, btn_y);
+  lv_obj_align(button_sd_test4, LV_ALIGN_CENTER, btn_x4, btn_y1);
   lv_obj_set_size(button_sd_test4, LV_SIZE_CONTENT, 35);
   lv_obj_t *button_label4 = lv_label_create(button_sd_test4);
-  lv_label_set_text(button_label4, "  4  ");
+  lv_label_set_text(button_label4, "Reset");
   lv_obj_center(button_label4);
   lv_obj_add_event_cb(button_sd_test4, button4_event_handler, LV_EVENT_ALL, NULL);
 
+  label_exec_msg = lv_label_create(bodyScreen);
+  lv_obj_set_x(label_exec_msg, 0);
+  lv_obj_set_y(label_exec_msg, btn_y2);
+  lv_obj_set_align(label_exec_msg, LV_ALIGN_CENTER);
+  lv_label_set_text(label_exec_msg, "");
 }
 
 void buildSettings() {
@@ -553,19 +557,157 @@ void buildSettings() {
 
   // Set MaxBRT
   tft_max_brightness_value = tft.getBrightness();
+  char buf1[8];
+  lv_snprintf(buf1, sizeof(buf1), "%d/%d", (int)tft_max_brightness_value, (int)tft_max_brightness_value);
+  lv_label_set_text(label_brt_value, buf1);
 }
 
 void button1_event_handler(lv_event_t *e) {
 
+  if (WiFi.status() != WL_CONNECTED) {
+    return;
+  }
+  if (tfcardStatus != TFCARD_UNMOUNT) {
+    return;
+  }
+
+  lv_event_code_t code = lv_event_get_code(e);
+  lv_obj_t *obj = lv_event_get_target(e);
+  if (code == LV_EVENT_CLICKED) {
+    int ret;
+
+    // [1 - Mount]
+    lv_label_set_text(label_exec_msg, "[1 - Mount] Start.");
+    loadTFCard();
+    if (tfcardStatus == TFCARD_UNMOUNT) {
+      lv_label_set_text(label_exec_msg, "[1 - Mount] UnMount.");
+      return;
+    } else if (tfcardStatus == TFCARD_MOUNTED) {
+      lv_label_set_text(label_exec_msg, "[1 - Mount] Mount.");
+      tfcardStatus = TFCARD_MOUNTED;
+    }
+    ESP_LOGE("TEST", "[1 - Mount] Mount.");
+    vTaskDelay(100);
+
+    // // [2 - SD Format] Test
+    // lv_label_set_text(label_exec_msg, "[2 - SD Format] Start.");
+    // ret = _SD_Format_FATFS();
+    // if (ret != ESP_OK) {
+    //   lv_label_set_text(label_exec_msg, "[2 - SD Format] NG.");
+    //   return;
+    // }
+    // lv_label_set_text(label_exec_msg, "[2 - SD Format] OK.");
+    // vTaskDelay(100);
+
+    // [3 - SD Create File]
+    const char *test_file_path = MOUNT_POINT"/testfile.txt";
+    const char *test_file_data = "abcdefgABCDEFG1234567";
+    lv_label_set_text(label_exec_msg, "[3 - SD Create File] Start.");
+    ret = _SD_WriteFile(test_file_path, (char *)test_file_data);
+    if (ret != ESP_OK) {
+      lv_label_set_text(label_exec_msg, "[3 - SD Create File] NG.");
+      return;
+    }
+    ESP_LOGE("TEST", "[3 - SD Create File] OK.");
+    lv_label_set_text(label_exec_msg, "[3 - SD Create File] OK.");
+    vTaskDelay(100);
+
+    // // [4 - SD File Exists]
+    // lv_label_set_text(label_exec_msg, "[4 - SD File Exists] Start.");
+    // ret = _SD_IsFileExists(test_file_path);
+    // if (ret != ESP_OK) {
+    //   lv_label_set_text(label_exec_msg, "[4 - SD File Exists] NG.");
+    //   return;
+    // }
+    // ESP_LOGE("TEST", "[4 - SD File Exists] OK.");
+    // lv_label_set_text(label_exec_msg, "[4 - SD File Exists] OK.");
+    // vTaskDelay(100);
+
+    // [5 - SD File Read] Test
+    lv_label_set_text(label_exec_msg, "[5 - SD File Read] Start.");
+    char *test_file_data_2;
+    ret = _SD_ReadFile(test_file_path, test_file_data_2);
+    // printf("_SD_ReadFile data:");
+    // printf(test_file_data_2);
+    // printf("\n");
+    if (ret != ESP_OK) {
+      printf("[5 - SD File Read] File NG.");
+      lv_label_set_text(label_exec_msg, "[5 - SD File Read] File NG.");
+      return;
+    } else {
+      if (test_file_data != test_file_data_2) {
+        printf("[5 - SD File Read] File Diff NG.");
+        lv_label_set_text(label_exec_msg, "[5 - SD File Read] File Diff NG.");
+        return;
+      }
+    }
+    ESP_LOGE("TEST", "[5 - SD File Read] OK.");
+    lv_label_set_text(label_exec_msg, "[5 - SD File Read] OK.");
+    vTaskDelay(100);
+
+    // [6 - SD File Remove]
+    const char *test_file_remove_path = MOUNT_POINT"/remove.txt";
+    lv_label_set_text(label_exec_msg, "[6 - SD File Remove] Start.");
+    ret = _SD_RemoveFile(test_file_path, test_file_remove_path);
+    if (ret != ESP_OK) {
+      lv_label_set_text(label_exec_msg, "[6 - SD File Remove] NG.");
+      return;
+    }
+    ESP_LOGE("TEST", "[6 - SD File Remove] OK.");
+    lv_label_set_text(label_exec_msg, "[6 - SD File Remove] OK.");
+    vTaskDelay(100);
+
+    // [7 - SD File Delete]
+    lv_label_set_text(label_exec_msg, "[7 - SD File Delete] Start.");
+    ret = _SD_DeleteFile(test_file_remove_path);
+    if (ret != ESP_OK) {
+      lv_label_set_text(label_exec_msg, "[7 - SD File Delete] NG.");
+      return;
+    }
+    ESP_LOGE("TEST", "[7 - SD File Delete] OK.");
+    lv_label_set_text(label_exec_msg, "[7 - SD File Delete] OK.");
+    vTaskDelay(100);
+
+    // [8 - SD Unmount]
+    lv_label_set_text(label_exec_msg, "[8 - SD Unmount] Start.");
+    ret = _SD_Unmount();
+    if (ret != ESP_OK) {
+      lv_label_set_text(label_exec_msg, "[8 - SD Unmount] NG.");
+      return;
+    }
+    ESP_LOGE("TEST", "[8 - SD Unmount] OK.");
+    lv_label_set_text(label_exec_msg, "[8 - SD Unmount] OK.");
+    vTaskDelay(100);
+
+    lv_label_set_text(label_exec_msg, "SDCard Test All OK.");
+
+  }
+
+
+  
 }
 void button2_event_handler(lv_event_t *e) {
-
+  lv_event_code_t code = lv_event_get_code(e);
+  lv_obj_t *obj = lv_event_get_target(e);
+  if (code == LV_EVENT_CLICKED) {
+    speaker_init();
+    playBeep(2500, 2000, 1000);
+    lv_label_set_text(label_exec_msg, "exec speaker_init.OK");
+  }
 }
 void button3_event_handler(lv_event_t *e) {
+  lv_event_code_t code = lv_event_get_code(e);
+  lv_obj_t *obj = lv_event_get_target(e);
+  if (code == LV_EVENT_CLICKED) {
 
+  }
 }
 void button4_event_handler(lv_event_t *e) {
-
+  lv_event_code_t code = lv_event_get_code(e);
+  lv_obj_t *obj = lv_event_get_target(e);
+  if (code == LV_EVENT_CLICKED) {
+    ESP.restart();
+  }
 }
 
 void list_event_handler(lv_event_t *e) {
