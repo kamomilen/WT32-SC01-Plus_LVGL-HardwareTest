@@ -13,6 +13,12 @@
 #define SD_SCLK       GPIO_NUM_39
 #define SD_CS         GPIO_NUM_41
 
+// Audio - Inter-IC
+//#define A_I2S_PORT    I2S_NUM_0
+#define A_LRCK        GPIO_NUM_35
+#define A_BCLK        GPIO_NUM_36
+#define A_DOUT        GPIO_NUM_37
+
 // EEPROM
 #define EEPROM_SIZE 128
 #define EEPROM_ADDR_WIFI_FLAG 0
