@@ -1,7 +1,7 @@
 # WT32-SC01-Plus_LVGL-HardwareTest
 WT32-SC01 Plus を使用したハードウェア検証の調査および開発をしています。
 
-## 利用環境 
+## 利用ライブラリ 
 - Graphics & Touch Driver : [LovyanGFX 1.1.5](https://github.com/lovyan03/LovyanGFX)
 - UI / Widgets : [LVGL 8.3.4](https://github.com/lvgl/lvgl)
 - Platform : [Espressif 32: development platform for PlatformIO](https://github.com/platformio/platform-espressif32)
