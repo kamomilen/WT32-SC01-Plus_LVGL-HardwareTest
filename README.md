@@ -1,5 +1,5 @@
 # WT32-SC01-Plus_LVGL-HardwareTest
-WT32-SC01 Plus のハードウェア検証のテストを調査・開発しています。
+WT32-SC01 Plus を使用したハードウェア検証の調査および開発をしています。
 
 ## ESP32-TUX - A Touch UX template to get you started.  
 - Graphics & Touch Driver : [LovyanGFX 1.1.5](https://github.com/lovyan03/LovyanGFX)
