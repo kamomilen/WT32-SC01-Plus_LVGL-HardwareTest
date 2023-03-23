@@ -5,7 +5,7 @@ WT32-SC01 Plus を使用したハードウェア検証の調査および開発�
 - Graphics & Touch Driver : [LovyanGFX 1.1.5](https://github.com/lovyan03/LovyanGFX)
 - UI / Widgets : [LVGL 8.3.4](https://github.com/lvgl/lvgl)
 - Platform : [Espressif 32: development platform for PlatformIO](https://github.com/platformio/platform-espressif32)
-- Framework : [ESP-IDF](https://github.com/espressif/esp-idf/)
+- Framework : arduino
 
 ## Features included 
 - [x] Wi-Fi サポート
