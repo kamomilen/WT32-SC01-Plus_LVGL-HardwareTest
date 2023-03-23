@@ -1,6 +1,6 @@
-// SD Card on SPI bus
+// TF Card on SPI bus
 
-//#include <SD.h>
+//#include <TF.h>
 //#include <SPI.h>
 #include <driver/sdspi_host.h>
 #include <driver/sdmmc_host.h>
@@ -12,16 +12,16 @@
 #include "helper_storage.hpp"
 
 static sdmmc_host_t sdmmc_host;
-static sdmmc_card_t* sdcard;
-const char *TAG = "sdcard";
+static sdmmc_card_t* tfcard;
+const char *TAG = "tfcard";
 
-esp_err_t _SD_Mount()
+esp_err_t _TF_Mount()
 {
     sdspi_device_config_t device_config = SDSPI_DEVICE_CONFIG_DEFAULT();
     device_config.host_id = SDSPI_HOST_ID;
-    device_config.gpio_cs = SD_CS;
+    device_config.gpio_cs = TF_CS;
 
-    ESP_LOGI(TAG, "Initializing SD card");
+    ESP_LOGI(TAG, "Initializing TF card");
     sdmmc_host_t _sdmmc_host = SDSPI_HOST_DEFAULT();
     _sdmmc_host.slot = device_config.host_id;
     //sdmmc_host = _sdmmc_host;
@@ -36,9 +36,9 @@ esp_err_t _SD_Mount()
 
     ESP_LOGI(TAG, "Initializing SPI BUS");
     spi_bus_config_t bus_cfg = {
-        .mosi_io_num = SD_MOSI,
-        .miso_io_num = SD_MISO,
-        .sclk_io_num = SD_SCLK,
+        .mosi_io_num = TF_MOSI,
+        .miso_io_num = TF_MISO,
+        .sclk_io_num = TF_SCLK,
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
         .max_transfer_sz = 4092,
@@ -51,7 +51,7 @@ esp_err_t _SD_Mount()
     }
 
     ESP_LOGI(TAG, "Mounting filesystem");
-    ret = esp_vfs_fat_sdspi_mount(MOUNT_POINT, (const sdmmc_host_t *)&_sdmmc_host, &device_config, &mount_config, &sdcard);
+    ret = esp_vfs_fat_sdspi_mount(MOUNT_POINT, (const sdmmc_host_t *)&_sdmmc_host, &device_config, &mount_config, &tfcard);
     sdmmc_host = _sdmmc_host;
     if (ret != ESP_OK) {
         if (ret == ESP_FAIL) {
@@ -60,22 +60,22 @@ esp_err_t _SD_Mount()
             return ESP_FAIL;
         } else {
             ESP_LOGE(TAG, "Failed to initialize the card (%s). "
-                     "Make sure SD card lines have pull-up resistors in place.", esp_err_to_name(ret));
+                     "Make sure TF card lines have pull-up resistors in place.", esp_err_to_name(ret));
             return ESP_FAIL;
         }
         return ESP_FAIL;
     }
     ESP_LOGI(TAG, "Filesystem mounted");
     // Card has been initialized, print its properties
-    sdmmc_card_print_info(stdout, sdcard);
+    sdmmc_card_print_info(stdout, tfcard);
 
     return ESP_OK;
 }
 
-esp_err_t _SD_Unmount() {
+esp_err_t _TF_Unmount() {
 
     // All done, unmount partition and disable SPI peripheral
-    esp_vfs_fat_sdcard_unmount(MOUNT_POINT, sdcard);
+    esp_vfs_fat_sdcard_unmount(MOUNT_POINT, tfcard);
     ESP_LOGI(TAG, "Card unmounted");
 
     //deinitialize the bus after all devices are removed
@@ -87,8 +87,8 @@ esp_err_t _SD_Unmount() {
     return ESP_OK;
 }
 
-// SDCard File Write
-esp_err_t _SD_WriteFile(const char *path, std::string data)
+// TFCard File Write
+esp_err_t _TF_WriteFile(const char *path, std::string data)
 {
     ESP_LOGI(TAG, "Opening file %s", path);
     FILE *f = fopen(path, "w");
@@ -103,8 +103,8 @@ esp_err_t _SD_WriteFile(const char *path, std::string data)
     return ESP_OK;
 }
 
-// SDCard File Read
-esp_err_t _SD_ReadFile(const char *path, std::string *data)
+// TFCard File Read
+esp_err_t _TF_ReadFile(const char *path, std::string *data)
 {
     std::string str;
     char buffer[READ_MAX_CHAR_SIZE];
@@ -130,8 +130,8 @@ esp_err_t _SD_ReadFile(const char *path, std::string *data)
     return ESP_OK;
 }
 
-// SDCard File existence check
-esp_err_t _SD_IsFileExists(const char *file_path) {
+// TFCard File existence check
+esp_err_t _TF_IsFileExists(const char *file_path) {
     // Open 出来ればファイルが存在すると判定することにする
     FILE *f = fopen(file_path, "r");
     if (f == NULL) {
@@ -142,23 +142,24 @@ esp_err_t _SD_IsFileExists(const char *file_path) {
     return ESP_OK;
 }
 
-// SDCard FAT Format[format not implemented]
-esp_err_t _SD_Format_FATFS() {
-    // Format FATFS
-    esp_err_t ret = esp_vfs_fat_sdcard_format(MOUNT_POINT, sdcard);
+// TFCard FAT Format[format not implemented]
+esp_err_t _TF_Format_FASDS() {
+    // Format FASDS
+    // esp_err_t ret = esp_vfs_fat_sdcard_format(MOUNT_POINT, tfcard);
+    esp_err_t ret = ESP_OK;
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to format FATFS (%s)", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "Failed to format FASDS (%s)", esp_err_to_name(ret));
         return ESP_FAIL;
     }
     return ESP_OK;
 }
 // [format not implemented]
-esp_err_t esp_vfs_fat_sdcard_format(const char *base_path, sdmmc_card_t *card) {
+esp_err_t esp_vfs_fat_tfcard_format(const char *base_path, sdmmc_card_t *card) {
     return ESP_OK;
 }
 
-// SDCard File Remove
-esp_err_t _SD_RemoveFile(const char *path) {
+// TFCard File Remove
+esp_err_t _TF_RemoveFile(const char *path) {
     ESP_LOGI(TAG, "Remove file %s", path);
     if (remove(path) != 0) {
         ESP_LOGE(TAG, "Remove failed");
@@ -167,8 +168,8 @@ esp_err_t _SD_RemoveFile(const char *path) {
     return ESP_OK;
 }
 
-// SDCard File Rename
-esp_err_t _SD_RenameFile(const char *file_from, const char *file_to) {
+// TFCard File Rename
+esp_err_t _TF_RenameFile(const char *file_from, const char *file_to) {
     ESP_LOGI(TAG, "Renaming file %s to %s", file_from, file_to);
     if (rename(file_from, file_to) != 0) {
         ESP_LOGE(TAG, "Rename failed");

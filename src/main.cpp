@@ -33,7 +33,7 @@ static lv_timer_t *screenLastTouchTime = 0;
 
 static TFCard_Status_t tfcardStatus = TFCARD_UNMOUNT;
 static Speaker_Status_t speakerStatus = Speaker_NONE;
-
+static audioPlayStatus_t audioPlayStatus = kTypeNull;
 //static LGFX tft;
 
 //const char *ntpServer = "ntp.nict.jp";
@@ -135,6 +135,9 @@ void setup(void)
 
 void loop()
 {
+  if (speakerStatus == Speaker_READY && audioPlayStatus == kTypeAudio) {
+    playLoopAudio();
+  }
   lv_timer_handler(); /* let the GUI do its work */
   delay(5);
 }
@@ -196,7 +199,7 @@ void saveWIFICredentialEEPROM(int flag, String ssidpw) {
 void loadTFCard() {
   switch(tfcardStatus) {
     case TFCARD_UNMOUNT:
-      _SD_Mount();
+      _TF_Mount();
       tfcardStatus = TFCARD_MOUNTED;
       break;
   }
@@ -205,7 +208,7 @@ void loadTFCard() {
 void unloadTFCard() {
   switch(tfcardStatus) {
     case TFCARD_MOUNTED:
-      _SD_Unmount();
+      _TF_Unmount();
       tfcardStatus = TFCARD_UNMOUNT;
       break;
   }
@@ -476,37 +479,37 @@ void buildCustomContents() {
   int btn_y1 = 35 * 1;
   int btn_y2 = 35 * 2;
   int btn_y3 = 35 * 3;
-  lv_obj_t *button_sd_test1 = lv_btn_create(bodyScreen);
-  lv_obj_align(button_sd_test1, LV_ALIGN_CENTER, btn_x1, btn_y1);
-  lv_obj_set_size(button_sd_test1, LV_SIZE_CONTENT, 35);
-  lv_obj_t *button_label1 = lv_label_create(button_sd_test1);
+  lv_obj_t *button_TF_test1 = lv_btn_create(bodyScreen);
+  lv_obj_align(button_TF_test1, LV_ALIGN_CENTER, btn_x1, btn_y1);
+  lv_obj_set_size(button_TF_test1, LV_SIZE_CONTENT, 35);
+  lv_obj_t *button_label1 = lv_label_create(button_TF_test1);
   lv_label_set_text(button_label1, "SD Test");
   lv_obj_center(button_label1);
-  lv_obj_add_event_cb(button_sd_test1, button1_event_handler, LV_EVENT_ALL, NULL);
+  lv_obj_add_event_cb(button_TF_test1, button1_event_handler, LV_EVENT_ALL, NULL);
 
-  lv_obj_t *button_sd_test2 = lv_btn_create(bodyScreen);
-  lv_obj_align(button_sd_test2, LV_ALIGN_CENTER, btn_x2, btn_y1);
-  lv_obj_set_size(button_sd_test2, LV_SIZE_CONTENT, 35);
-  lv_obj_t *button_label2 = lv_label_create(button_sd_test2);
+  lv_obj_t *button_TF_test2 = lv_btn_create(bodyScreen);
+  lv_obj_align(button_TF_test2, LV_ALIGN_CENTER, btn_x2, btn_y1);
+  lv_obj_set_size(button_TF_test2, LV_SIZE_CONTENT, 35);
+  lv_obj_t *button_label2 = lv_label_create(button_TF_test2);
   lv_label_set_text(button_label2, "SPK Test");
   lv_obj_center(button_label2);
-  lv_obj_add_event_cb(button_sd_test2, button2_event_handler, LV_EVENT_ALL, NULL);
+  lv_obj_add_event_cb(button_TF_test2, button2_event_handler, LV_EVENT_ALL, NULL);
 
-  lv_obj_t *button_sd_test3 = lv_btn_create(bodyScreen);
-  lv_obj_align(button_sd_test3, LV_ALIGN_CENTER, btn_x3, btn_y1);
-  lv_obj_set_size(button_sd_test3, LV_SIZE_CONTENT, 35);
-  lv_obj_t *button_label3 = lv_label_create(button_sd_test3);
+  lv_obj_t *button_TF_test3 = lv_btn_create(bodyScreen);
+  lv_obj_align(button_TF_test3, LV_ALIGN_CENTER, btn_x3, btn_y1);
+  lv_obj_set_size(button_TF_test3, LV_SIZE_CONTENT, 35);
+  lv_obj_t *button_label3 = lv_label_create(button_TF_test3);
   lv_label_set_text(button_label3, "  -  ");
   lv_obj_center(button_label3);
-  lv_obj_add_event_cb(button_sd_test3, button3_event_handler, LV_EVENT_ALL, NULL);
+  lv_obj_add_event_cb(button_TF_test3, button3_event_handler, LV_EVENT_ALL, NULL);
 
-  lv_obj_t *button_sd_test4 = lv_btn_create(bodyScreen);
-  lv_obj_align(button_sd_test4, LV_ALIGN_CENTER, btn_x4, btn_y1);
-  lv_obj_set_size(button_sd_test4, LV_SIZE_CONTENT, 35);
-  lv_obj_t *button_label4 = lv_label_create(button_sd_test4);
+  lv_obj_t *button_TF_test4 = lv_btn_create(bodyScreen);
+  lv_obj_align(button_TF_test4, LV_ALIGN_CENTER, btn_x4, btn_y1);
+  lv_obj_set_size(button_TF_test4, LV_SIZE_CONTENT, 35);
+  lv_obj_t *button_label4 = lv_label_create(button_TF_test4);
   lv_label_set_text(button_label4, "Reset");
   lv_obj_center(button_label4);
-  lv_obj_add_event_cb(button_sd_test4, button4_event_handler, LV_EVENT_ALL, NULL);
+  lv_obj_add_event_cb(button_TF_test4, button4_event_handler, LV_EVENT_ALL, NULL);
 
   label_exec_msg = lv_label_create(bodyScreen);
   lv_obj_set_x(label_exec_msg, 0);
@@ -577,21 +580,21 @@ void button1_event_handler(lv_event_t *e) {
     ESP_LOGI("TEST", "[1 - Mount] Mount.");
 
     // [2 - SD Format] Test
-    printf("[2 - SD Format] Start.\n");
-    ret = _SD_Format_FATFS();
-    if (ret != ESP_OK) {
-      printf("[2 - SD Format] NG.\n");
-      lv_label_set_text(label_exec_msg, "[2 - SD Format] NG.");
-      return;
-    }
-    ESP_LOGI("TEST", "[2 - SD Format] OK.");
-    printf("[2 - SD Format] OK.\n");
+    // printf("[2 - SD Format] Start.\n");
+    // ret = _TF_Format_FATFS();
+    // if (ret != ESP_OK) {
+    //   printf("[2 - SD Format] NG.\n");
+    //   lv_label_set_text(label_exec_msg, "[2 - SD Format] NG.");
+    //   return;
+    // }
+    // ESP_LOGI("TEST", "[2 - SD Format] OK.");
+    // printf("[2 - SD Format] OK.\n");
 
     // [3 - SD Create File]
     const char *test_file_path = MOUNT_POINT"/testfile.txt";
     std::string test_file_data = "abcdefg\nABCDEFG\n1234567\n";
     printf("[3 - SD Create File] Start.\n");
-    ret = _SD_WriteFile(test_file_path, test_file_data.c_str());
+    ret = _TF_WriteFile(test_file_path, test_file_data.c_str());
     if (ret != ESP_OK) {
       printf("[3 - SD Create File] NG.\n");
       lv_label_set_text(label_exec_msg, "[3 - SD Create File] NG.");
@@ -602,7 +605,7 @@ void button1_event_handler(lv_event_t *e) {
 
     // [4 - SD File Exists]
     printf("[4 - SD File Exists] Start.\n");
-    ret = _SD_IsFileExists(test_file_path);
+    ret = _TF_IsFileExists(test_file_path);
     if (ret != ESP_OK) {
       printf("[4 - SD File Exists] NG.");
       lv_label_set_text(label_exec_msg, "[4 - SD File Exists] NG.");
@@ -614,7 +617,7 @@ void button1_event_handler(lv_event_t *e) {
     // [5 - SD File Read] Test
     printf("[5 - SD File Read] Start.\n");
     std::string test_file_data_2;
-    ret = _SD_ReadFile(test_file_path, &test_file_data_2);
+    ret = _TF_ReadFile(test_file_path, &test_file_data_2);
     if (ret != ESP_OK) {
       printf("[5 - SD File Read] File NG.\n");
       lv_label_set_text(label_exec_msg, "[5 - SD File Read] File NG.");
@@ -634,7 +637,7 @@ void button1_event_handler(lv_event_t *e) {
     // [6 - SD File Remove]
     const char *test_file_remove_path = MOUNT_POINT"/remove.txt";
     printf("[6 - SD File Remove] Start.\n");
-    ret = _SD_RenameFile(test_file_path, test_file_remove_path);
+    ret = _TF_RenameFile(test_file_path, test_file_remove_path);
     if (ret != ESP_OK) {
       printf("[6 - SD File Remove] NG.\n");
       lv_label_set_text(label_exec_msg, "[6 - SD File Remove] NG.");
@@ -645,7 +648,7 @@ void button1_event_handler(lv_event_t *e) {
 
     // [7 - SD File Delete]
     printf("[7 - SD File Delete] Start.\n");
-    ret = _SD_RemoveFile(test_file_remove_path);
+    ret = _TF_RemoveFile(test_file_remove_path);
     if (ret != ESP_OK) {
       printf("[7 - SD File Delete] NG.\n");
       lv_label_set_text(label_exec_msg, "[7 - SD File Delete] NG.");
@@ -656,7 +659,7 @@ void button1_event_handler(lv_event_t *e) {
 
     // [8 - SD Unmount]
     printf("[8 - SD Unmount] Start.\n");
-    ret = _SD_Unmount();
+    ret = _TF_Unmount();
     if (ret != ESP_OK) {
       printf("[8 - SD Unmount] NG.\n");
       lv_label_set_text(label_exec_msg, "[8 - SD Unmount] NG.");
@@ -674,12 +677,12 @@ void button2_event_handler(lv_event_t *e) {
   lv_obj_t *obj = lv_event_get_target(e);
   if (code == LV_EVENT_CLICKED) {
     int ret;
-    if (speakerStatus == Speaker_READY) {
-        printf("[1 - Unload] Start.\n");
-        speaker_unload();
-        speakerStatus = Speaker_NONE;
-        printf("[1 - Unload] End.\n");
-    }
+    // if (speakerStatus == Speaker_READY) {
+    //     printf("[1 - Unload] Start.\n");
+    //     speaker_unload();
+    //     speakerStatus = Speaker_NONE;
+    //     printf("[1 - Unload] End.\n");
+    // }
 
     printf("[1 - Init] Start.\n");
     ret = speaker_init();
@@ -690,27 +693,34 @@ void button2_event_handler(lv_event_t *e) {
     speakerStatus = Speaker_READY;
     printf("[1 - Init] OK.\n");
 
-    printf("[2 - Beep] Start.\n");
-    if (speakerStatus == Speaker_READY) {
-      ret = playBeep(2500, 2000, 1000);
-      if (ret != ESP_OK) {
-        printf("[2 - Beep] Exec ERR.\n");
-        return;
-      }
-    } else {
-      printf("[2 - Beep] Status Error.\n");
-      return;
-    }
-    printf("[2 - Beep] OK.\n");
-
-    printf("[3 - Unmount] Start.\n");
-    ret = speaker_unload();
+    // printf("[2 - Beep] Start.\n");
+    // if (speakerStatus == Speaker_READY) {
+    //   ret = playBeep(2500, 2000, 1000);
+    //   if (ret != ESP_OK) {
+    //     printf("[2 - Beep] Exec ERR.\n");
+    //     return;
+    //   }
+    // } else {
+    //   printf("[2 - Beep] Status Error.\n");
+    //   return;
+    // }
+    // printf("[2 - Beep] OK.\n");
+    printf("[2 - AudioPlay] Start.\n");
+    ret = playDemoAudio();
     if (ret != ESP_OK) {
-      printf("[3 - Unmount] ERR.\n");
+      printf("[2 - AudioPlay] Exec ERR.\n");
       return;
     }
-    speakerStatus = Speaker_NONE;
-    printf("[3 - Unmount] OK.\n");
+    printf("[2 - AudioPlay] OK.\n");
+
+    // printf("[3 - Unmount] Start.\n");
+    // ret = speaker_unload();
+    // if (ret != ESP_OK) {
+    //   printf("[3 - Unmount] ERR.\n");
+    //   return;
+    // }
+    // speakerStatus = Speaker_NONE;
+    // printf("[3 - Unmount] OK.\n");
 
     lv_label_set_text(label_exec_msg, "exec speaker_test. All OK");
   }
@@ -905,6 +915,11 @@ void updateLocalTime() {
   if (tfcardStatus == TFCARD_MOUNTED) {
     hourMinWithSymbol += "   ";
     hourMinWithSymbol += LV_SYMBOL_SD_CARD;
+  }
+  if (speakerStatus == Speaker_READY && audioPlayStatus == kTypeAudio) {
+    hourMinWithSymbol += "   ";
+    hourMinWithSymbol += LV_SYMBOL_AUDIO;
+    hourMinWithSymbol += " (vol.10/27) ";
   }
   lv_label_set_text(timeLabel, hourMinWithSymbol.c_str());
 }

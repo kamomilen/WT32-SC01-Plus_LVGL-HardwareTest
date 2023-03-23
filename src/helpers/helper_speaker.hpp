@@ -1,10 +1,14 @@
 
 #pragma once
 
+
+
 #define _rate   44100
 esp_err_t speaker_init();
 esp_err_t speaker_unload();
 //size_t playRAW(const uint8_t *__audioPtr, size_t __size, bool __modal = false, bool freeFlag = true, TickType_t __ticksToWait = portMAX_DELAY);
+esp_err_t playDemoAudio();
+esp_err_t playLoopAudio();
 size_t playBeep(int __freq = 2000, int __timems = 200, int __maxval = 10000, bool __modal = false);
 float fastSin(float theta);
 
@@ -24,11 +28,11 @@ typedef struct {
     bool freeFlag;
 } audioParameters_t;
 
-enum playType {
-    kTypeNull = 0,
+typedef enum {
+    kTypeNull,
     kTypeAudio,
     kTypeBeep,
-};
+} audioPlayStatus_t;
 
 typedef struct {
     int type;

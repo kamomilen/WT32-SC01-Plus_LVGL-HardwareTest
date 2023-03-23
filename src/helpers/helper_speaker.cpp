@@ -1,52 +1,59 @@
 // https://github.com/riraosan/ESP32_BT-A2DP_Receiver/blob/master/src/Application.h
 #include <cmath>
 #include <Arduino.h>
+#include <Audio.h>
 #include <driver/i2s.h>
 #include <queue.h>
 #include "common.hpp"
 #include "helpers/helper_speaker.hpp"
 
-static i2s_port_t a_i2s_port_t = I2S_NUM_1;
+Audio audio;
+static i2s_port_t a_i2s_port_t = I2S_NUM_0;
 const char *TAG_SP = "speaker";
 
 esp_err_t speaker_init() {
     esp_err_t ret;
 
-    i2s_pin_config_t pin_config = {
-        .bck_io_num   = A_BCLK,
-        .ws_io_num    = A_LRCK,
-        .data_out_num = A_DOUT,
-        .data_in_num  = I2S_PIN_NO_CHANGE  // Use in i2s_pin_config_t for pins which should not be changed
-    };
+    // i2s_pin_config_t pin_config = {
+    //     .bck_io_num   = A_BCLK,
+    //     .ws_io_num    = A_LRCK,
+    //     .data_out_num = A_DOUT,
+    //     .data_in_num  = I2S_PIN_NO_CHANGE  // Use in i2s_pin_config_t for pins which should not be changed
+    // };
 
-    i2s_config_t i2s_config = {
-        .mode                 = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
-        .sample_rate          = 44100,                       // corrected by info from bluetooth
-        .bits_per_sample      = (i2s_bits_per_sample_t)16,   // set_bits_per_sample()
-        .channel_format       = I2S_CHANNEL_FMT_RIGHT_LEFT,  // 2-channels
-        .communication_format = I2S_COMM_FORMAT_STAND_I2S,   // I2S communication format I2S
-        .intr_alloc_flags     = ESP_INTR_FLAG_LEVEL1,        // default interrupt priority
-        .dma_buf_count        = 8,                           // default
-        .dma_buf_len          = 64,                          // default
-        .use_apll             = false,                       // I2S using APLL as main I2S clock, enable it to get accurate clock
-        .tx_desc_auto_clear   = true                         // I2S auto clear tx descriptor if there is underflow condition
-    };
+    // i2s_config_t i2s_config = {
+    //     .mode                 = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
+    //     .sample_rate          = 44100,                       // corrected by info from bluetooth
+    //     .bits_per_sample      = (i2s_bits_per_sample_t)16,   // set_bits_per_sample()
+    //     .channel_format       = I2S_CHANNEL_FMT_RIGHT_LEFT,  // 2-channels
+    //     .communication_format = I2S_COMM_FORMAT_STAND_I2S,   // I2S communication format I2S
+    //     .intr_alloc_flags     = ESP_INTR_FLAG_LEVEL1,        // default interrupt priority
+    //     .dma_buf_count        = 8,                           // default
+    //     .dma_buf_len          = 64,                          // default
+    //     .use_apll             = false,                       // I2S using APLL as main I2S clock, enable it to get accurate clock
+    //     .tx_desc_auto_clear   = true                         // I2S auto clear tx descriptor if there is underflow condition
+    // };
 
-    ret = i2s_driver_install(a_i2s_port_t, &i2s_config, 0, NULL);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG_SP, "Failed to i2s_driver_install (%s, pin=%d)", esp_err_to_name(ret), a_i2s_port_t);
-        return ESP_FAIL;
-    }
-    ret = i2s_set_pin(a_i2s_port_t, &pin_config);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG_SP, "Failed to i2s_set_pin (%s, pin=%d)", esp_err_to_name(ret), a_i2s_port_t);
-        return ESP_FAIL;
-    }
-    ret = i2s_set_clk(a_i2s_port_t, i2s_config.sample_rate, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_MONO);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG_SP, "Failed to i2s_set_clk (%s, rate=%d, channel=%d)", esp_err_to_name(ret), I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_MONO);
-        return ESP_FAIL;
-    }
+    // ret = i2s_driver_install(a_i2s_port_t, &i2s_config, 0, NULL);
+    // if (ret != ESP_OK) {
+    //     ESP_LOGE(TAG_SP, "Failed to i2s_driver_install (%s, pin=%d)", esp_err_to_name(ret), a_i2s_port_t);
+    //     return ESP_FAIL;
+    // }
+    // ret = i2s_set_pin(a_i2s_port_t, &pin_config);
+    // if (ret != ESP_OK) {
+    //     ESP_LOGE(TAG_SP, "Failed to i2s_set_pin (%s, pin=%d)", esp_err_to_name(ret), a_i2s_port_t);
+    //     return ESP_FAIL;
+    // }
+    // ret = i2s_set_clk(a_i2s_port_t, i2s_config.sample_rate, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_MONO);
+    // if (ret != ESP_OK) {
+    //     ESP_LOGE(TAG_SP, "Failed to i2s_set_clk (%s, rate=%d, channel=%d)", esp_err_to_name(ret), I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_MONO);
+    //     return ESP_FAIL;
+    // }
+
+    /* https://github.com/JasonMcClain/WT32-SC01-Plus-I2S-Demo/blob/main/i2s_demo.ino start.*/
+    audio.setPinout(A_BCLK, A_LRCK, A_DOUT);
+    audio.setVolume(10);                                                   // Values from 0 to 21
+    /* https://github.com/JasonMcClain/WT32-SC01-Plus-I2S-Demo/blob/main/i2s_demo.ino end.*/
 
     return ESP_OK;
 }
@@ -58,6 +65,18 @@ esp_err_t speaker_unload() {
         ESP_LOGE(TAG_SP, "Failed to i2s_driver_uninstall (%s)", esp_err_to_name(ret));
         return ESP_FAIL;
     }
+    return ESP_OK;
+}
+
+esp_err_t playDemoAudio() {
+    /* https://github.com/JasonMcClain/WT32-SC01-Plus-I2S-Demo/blob/main/i2s_demo.ino start.*/
+    audio.connecttohost("http://us5.internet-radio.com:8201/listen.pls");
+    /* https://github.com/JasonMcClain/WT32-SC01-Plus-I2S-Demo/blob/main/i2s_demo.ino end.*/
+    return ESP_OK;
+}
+
+esp_err_t playLoopAudio() {
+    audio.loop();
     return ESP_OK;
 }
 

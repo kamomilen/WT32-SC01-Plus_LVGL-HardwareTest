@@ -7,12 +7,12 @@
 #define SD_SUPPORTED
 #define SOC_I2S_SUPPORTS_ADC
 
-// SD CARD - SPI
+// TF CARD - SPI
 #define SDSPI_HOST_ID SPI3_HOST
-#define SD_MISO       GPIO_NUM_38 
-#define SD_MOSI       GPIO_NUM_40
-#define SD_SCLK       GPIO_NUM_39
-#define SD_CS         GPIO_NUM_41
+#define TF_MISO       GPIO_NUM_38 
+#define TF_MOSI       GPIO_NUM_40
+#define TF_SCLK       GPIO_NUM_39
+#define TF_CS         GPIO_NUM_41
 
 // Audio - Inter-IC
 //#define A_I2S_PORT    I2S_NUM_0

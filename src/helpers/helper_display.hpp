@@ -52,7 +52,7 @@ public:
       cfg.invert           =  true;
       cfg.rgb_order        = false;
       cfg.dlen_16bit       = false;
-      cfg.bus_shared       = false;
+      cfg.bus_shared       = true; // If the bus is shared with the TF card, set to True
 
       _panel_instance.config(cfg);
     }
