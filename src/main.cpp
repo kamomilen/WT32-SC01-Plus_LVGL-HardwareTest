@@ -589,7 +589,7 @@ void button1_event_handler(lv_event_t *e) {
 
     // [3 - SD Create File]
     const char *test_file_path = MOUNT_POINT"/testfile.txt";
-    std::string test_file_data = "abcdefgABCDEFG\n1234567";
+    std::string test_file_data = "abcdefg\nABCDEFG\n1234567\n";
     printf("[3 - SD Create File] Start.\n");
     ret = _SD_WriteFile(test_file_path, test_file_data.c_str());
     if (ret != ESP_OK) {
@@ -634,7 +634,7 @@ void button1_event_handler(lv_event_t *e) {
     // [6 - SD File Remove]
     const char *test_file_remove_path = MOUNT_POINT"/remove.txt";
     printf("[6 - SD File Remove] Start.\n");
-    ret = _SD_RemoveFile(test_file_path, test_file_remove_path);
+    ret = _SD_RenameFile(test_file_path, test_file_remove_path);
     if (ret != ESP_OK) {
       printf("[6 - SD File Remove] NG.\n");
       lv_label_set_text(label_exec_msg, "[6 - SD File Remove] NG.");
@@ -645,7 +645,7 @@ void button1_event_handler(lv_event_t *e) {
 
     // [7 - SD File Delete]
     printf("[7 - SD File Delete] Start.\n");
-    ret = _SD_DeleteFile(test_file_remove_path);
+    ret = _SD_RemoveFile(test_file_remove_path);
     if (ret != ESP_OK) {
       printf("[7 - SD File Delete] NG.\n");
       lv_label_set_text(label_exec_msg, "[7 - SD File Delete] NG.");

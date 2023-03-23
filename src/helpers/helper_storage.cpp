@@ -158,17 +158,22 @@ esp_err_t esp_vfs_fat_sdcard_format(const char *base_path, sdmmc_card_t *card) {
 }
 
 // SDCard File Remove
-esp_err_t _SD_RemoveFile(const char *file_from, const char *file_to) {
-    ESP_LOGI(TAG, "Renaming file %s to %s", file_from, file_to);
-    if (rename(file_from, file_to) != 0) {
-        ESP_LOGE(TAG, "Rename failed");
+esp_err_t _SD_RemoveFile(const char *path) {
+    ESP_LOGI(TAG, "Remove file %s", path);
+    if (remove(path) != 0) {
+        ESP_LOGE(TAG, "Remove failed");
         return ESP_FAIL;
     }
     return ESP_OK;
 }
 
-// not implemented
-esp_err_t _SD_DeleteFile(const char *path) {
+// SDCard File Rename
+esp_err_t _SD_RenameFile(const char *file_from, const char *file_to) {
+    ESP_LOGI(TAG, "Renaming file %s to %s", file_from, file_to);
+    if (rename(file_from, file_to) != 0) {
+        ESP_LOGE(TAG, "Rename failed");
+        return ESP_FAIL;
+    }
     return ESP_OK;
 }
 

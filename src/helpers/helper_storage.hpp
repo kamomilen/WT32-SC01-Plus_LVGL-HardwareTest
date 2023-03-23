@@ -12,10 +12,10 @@ esp_err_t _SD_Mount();
 esp_err_t _SD_Unmount();
 esp_err_t _SD_IsFileExists(const char * file_path);
 esp_err_t _SD_Format_FATFS();
-esp_err_t _SD_RemoveFile(const char *file_from, const char *file_to);
+esp_err_t _SD_RemoveFile(const char *path);
+esp_err_t _SD_RenameFile(const char *file_from, const char *file_to);
 esp_err_t _SD_WriteFile(const char *path, std::string data);
 esp_err_t _SD_ReadFile(const char *path, std::string *data);
-esp_err_t _SD_DeleteFile(const char *path);
 esp_err_t esp_vfs_fat_sdcard_format(const char *base_path, sdmmc_card_t *card);
 
 typedef enum {
