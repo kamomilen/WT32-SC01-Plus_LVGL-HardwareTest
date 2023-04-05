@@ -483,7 +483,7 @@ void buildCustomContents() {
   lv_obj_align(button_TF_test1, LV_ALIGN_CENTER, btn_x1, btn_y1);
   lv_obj_set_size(button_TF_test1, LV_SIZE_CONTENT, 35);
   lv_obj_t *button_label1 = lv_label_create(button_TF_test1);
-  lv_label_set_text(button_label1, "SD Test");
+  lv_label_set_text(button_label1, "TF Test");
   lv_obj_center(button_label1);
   lv_obj_add_event_cb(button_TF_test1, button1_event_handler, LV_EVENT_ALL, NULL);
 
@@ -579,96 +579,96 @@ void button1_event_handler(lv_event_t *e) {
     }
     ESP_LOGI("TEST", "[1 - Mount] Mount.");
 
-    // [2 - SD Format] Test
-    // printf("[2 - SD Format] Start.\n");
+    // [2 - TF Format] Test
+    // printf("[2 - TF Format] Start.\n");
     // ret = _TF_Format_FATFS();
     // if (ret != ESP_OK) {
-    //   printf("[2 - SD Format] NG.\n");
-    //   lv_label_set_text(label_exec_msg, "[2 - SD Format] NG.");
+    //   printf("[2 - TF Format] NG.\n");
+    //   lv_label_set_text(label_exec_msg, "[2 - TF Format] NG.");
     //   return;
     // }
-    // ESP_LOGI("TEST", "[2 - SD Format] OK.");
-    // printf("[2 - SD Format] OK.\n");
+    // ESP_LOGI("TEST", "[2 - TF Format] OK.");
+    // printf("[2 - TF Format] OK.\n");
 
-    // [3 - SD Create File]
+    // [3 - TF Create File]
     const char *test_file_path = MOUNT_POINT"/testfile.txt";
     std::string test_file_data = "abcdefg\nABCDEFG\n1234567\n";
-    printf("[3 - SD Create File] Start.\n");
+    printf("[3 - TF Create File] Start.\n");
     ret = _TF_WriteFile(test_file_path, test_file_data.c_str());
     if (ret != ESP_OK) {
-      printf("[3 - SD Create File] NG.\n");
-      lv_label_set_text(label_exec_msg, "[3 - SD Create File] NG.");
+      printf("[3 - TF Create File] NG.\n");
+      lv_label_set_text(label_exec_msg, "[3 - TF Create File] NG.");
       return;
     }
-    ESP_LOGI("TEST", "[3 - SD Create File] OK.");
-    printf("[3 - SD Create File] OK.\n");
+    ESP_LOGI("TEST", "[3 - TF Create File] OK.");
+    printf("[3 - TF Create File] OK.\n");
 
-    // [4 - SD File Exists]
-    printf("[4 - SD File Exists] Start.\n");
+    // [4 - TF File Exists]
+    printf("[4 - TF File Exists] Start.\n");
     ret = _TF_IsFileExists(test_file_path);
     if (ret != ESP_OK) {
-      printf("[4 - SD File Exists] NG.");
-      lv_label_set_text(label_exec_msg, "[4 - SD File Exists] NG.");
+      printf("[4 - TF File Exists] NG.");
+      lv_label_set_text(label_exec_msg, "[4 - TF File Exists] NG.");
       return;
     }
-    ESP_LOGI("TEST", "[4 - SD File Exists] OK.");
-    printf("[4 - SD File Exists] OK.\n");
+    ESP_LOGI("TEST", "[4 - TF File Exists] OK.");
+    printf("[4 - TF File Exists] OK.\n");
 
-    // [5 - SD File Read] Test
-    printf("[5 - SD File Read] Start.\n");
+    // [5 - TF File Read] Test
+    printf("[5 - TF File Read] Start.\n");
     std::string test_file_data_2;
     ret = _TF_ReadFile(test_file_path, &test_file_data_2);
     if (ret != ESP_OK) {
-      printf("[5 - SD File Read] File NG.\n");
-      lv_label_set_text(label_exec_msg, "[5 - SD File Read] File NG.");
+      printf("[5 - TF File Read] File NG.\n");
+      lv_label_set_text(label_exec_msg, "[5 - TF File Read] File NG.");
       return;
     } else {
       // printf("1:%s\n", test_file_data.c_str());
       // printf("2:%s\n", test_file_data_2.c_str());
       if (test_file_data != test_file_data_2) {
-        printf("[5 - SD File Read] File Diff NG.\n");
-        lv_label_set_text(label_exec_msg, "[5 - SD File Read] File Diff NG.");
+        printf("[5 - TF File Read] File Diff NG.\n");
+        lv_label_set_text(label_exec_msg, "[5 - TF File Read] File Diff NG.");
         return;
       }
     }
-    ESP_LOGI("TEST", "[5 - SD File Read] OK.");
-    printf("[5 - SD File Read] OK.\n");
+    ESP_LOGI("TEST", "[5 - TF File Read] OK.");
+    printf("[5 - TF File Read] OK.\n");
 
-    // [6 - SD File Remove]
+    // [6 - TF File Remove]
     const char *test_file_remove_path = MOUNT_POINT"/remove.txt";
-    printf("[6 - SD File Remove] Start.\n");
+    printf("[6 - TF File Remove] Start.\n");
     ret = _TF_RenameFile(test_file_path, test_file_remove_path);
     if (ret != ESP_OK) {
-      printf("[6 - SD File Remove] NG.\n");
-      lv_label_set_text(label_exec_msg, "[6 - SD File Remove] NG.");
+      printf("[6 - TF File Remove] NG.\n");
+      lv_label_set_text(label_exec_msg, "[6 - TF File Remove] NG.");
       return;
     }
-    ESP_LOGI("TEST", "[6 - SD File Remove] OK.");
-    printf("[6 - SD File Remove] OK.\n");
+    ESP_LOGI("TEST", "[6 - TF File Remove] OK.");
+    printf("[6 - TF File Remove] OK.\n");
 
-    // [7 - SD File Delete]
-    printf("[7 - SD File Delete] Start.\n");
+    // [7 - TF File Delete]
+    printf("[7 - TF File Delete] Start.\n");
     ret = _TF_RemoveFile(test_file_remove_path);
     if (ret != ESP_OK) {
-      printf("[7 - SD File Delete] NG.\n");
-      lv_label_set_text(label_exec_msg, "[7 - SD File Delete] NG.");
+      printf("[7 - TF File Delete] NG.\n");
+      lv_label_set_text(label_exec_msg, "[7 - TF File Delete] NG.");
       return;
     }
-    ESP_LOGI("TEST", "[7 - SD File Delete] OK.");
-    printf("[7 - SD File Delete] OK.\n");
+    ESP_LOGI("TEST", "[7 - TF File Delete] OK.");
+    printf("[7 - TF File Delete] OK.\n");
 
-    // [8 - SD Unmount]
-    printf("[8 - SD Unmount] Start.\n");
+    // [8 - TF Unmount]
+    printf("[8 - TF Unmount] Start.\n");
     ret = _TF_Unmount();
     if (ret != ESP_OK) {
-      printf("[8 - SD Unmount] NG.\n");
-      lv_label_set_text(label_exec_msg, "[8 - SD Unmount] NG.");
+      printf("[8 - TF Unmount] NG.\n");
+      lv_label_set_text(label_exec_msg, "[8 - TF Unmount] NG.");
       return;
     }
-    ESP_LOGI("TEST", "[8 - SD Unmount] OK.");
-    printf("[8 - SD Unmount] OK.\n");
+    ESP_LOGI("TEST", "[8 - TF Unmount] OK.");
+    printf("[8 - TF Unmount] OK.\n");
 
-    lv_label_set_text(label_exec_msg, "SDCard Test All OK.");
+    lv_label_set_text(label_exec_msg, "TFCard Test All OK.");
   }
 }
 
@@ -684,14 +684,6 @@ void button2_event_handler(lv_event_t *e) {
     //     printf("[1 - Unload] End.\n");
     // }
 
-    printf("[1 - Init] Start.\n");
-    ret = speaker_init();
-    if (ret != ESP_OK) {
-      printf("[1 - Init] ERR.\n");
-      return;
-    }
-    speakerStatus = Speaker_READY;
-    printf("[1 - Init] OK.\n");
 
     // printf("[2 - Beep] Start.\n");
     // if (speakerStatus == Speaker_READY) {
@@ -705,13 +697,25 @@ void button2_event_handler(lv_event_t *e) {
     //   return;
     // }
     // printf("[2 - Beep] OK.\n");
-    printf("[2 - AudioPlay] Start.\n");
-    ret = playDemoAudio();
-    if (ret != ESP_OK) {
-      printf("[2 - AudioPlay] Exec ERR.\n");
-      return;
+
+    if (speakerStatus != Speaker_READY) {
+      printf("[1 - Init] Start.\n");
+      ret = speaker_init();
+      if (ret != ESP_OK) {
+        printf("[1 - Init] ERR.\n");
+        return;
+      }
+      speakerStatus = Speaker_READY;
+      printf("[1 - Init] OK.\n");
+
+      printf("[2 - AudioPlay] Start.\n");
+      ret = playDemoAudio();
+      if (ret != ESP_OK) {
+        printf("[2 - AudioPlay] Exec ERR.\n");
+        return;
+      }
+      printf("[2 - AudioPlay] OK.\n");
     }
-    printf("[2 - AudioPlay] OK.\n");
 
     // printf("[3 - Unmount] Start.\n");
     // ret = speaker_unload();
@@ -802,6 +806,10 @@ void beginWIFITask(void *pvParameters) {
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
   vTaskDelay(100);
+
+  Serial.print(">WiFi mac:");
+  Serial.println(WiFi.macAddress());
+  printf("WiFi Mac:%s\n",WiFi.macAddress());
 
   WiFi.begin(ssidName.c_str(), ssidPW.c_str());
   while (WiFi.status() != WL_CONNECTED && (millis() - startingTime) < networkTimeout) {
@@ -916,7 +924,7 @@ void updateLocalTime() {
     hourMinWithSymbol += "   ";
     hourMinWithSymbol += LV_SYMBOL_SD_CARD;
   }
-  if (speakerStatus == Speaker_READY && audioPlayStatus == kTypeAudio) {
+  if (speakerStatus == Speaker_READY) {
     hourMinWithSymbol += "   ";
     hourMinWithSymbol += LV_SYMBOL_AUDIO;
     hourMinWithSymbol += " (vol.10/27) ";
