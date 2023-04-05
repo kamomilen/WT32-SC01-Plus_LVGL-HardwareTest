@@ -18,6 +18,7 @@ void loadWIFICredentialEEPROM();
 void popupMsgBox();
 void networkScanner();
 void networkConnector();
+void LCDSleepTask() ;
 void btn_event_cb();
 void timerForNetwork(lv_timer_t *timer);
 void btn_event_cb(lv_event_t *e);
@@ -35,9 +36,10 @@ void makeKeyboard();
 void buildStatusBar();
 void buildPWMsgBox();
 void buildCustomContents();
+void LCDSleep(void *pvParameters);
 void scanWIFITask(void *pvParameters);
 void set_slider_text_value(lv_obj_t * trg, int16_t val, char * prefix, char * postfix);
 void loadTFCard();
-
+void onReceive(const uint8_t* mac_addr, const uint8_t* data, int data_len);
 
 

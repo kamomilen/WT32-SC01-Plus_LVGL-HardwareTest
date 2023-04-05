@@ -3,6 +3,7 @@
 #include <vector>
 #include "time.h"
 #include "WiFi.h"
+//#include <esp_now.h>
 #include <EEPROM.h>
 #include <LovyanGFX.hpp> // main library
 #include <lvgl.h>
@@ -19,13 +20,16 @@ typedef enum {
   NETWORK_SEARCHING,
   NETWORK_CONNECTED_POPUP,
   NETWORK_CONNECTED,
-  NETWORK_CONNECT_FAILED
+  NETWORK_CONNECT_FAILED,
+  NETWORK_ESP_MODE
 } Network_Status_t;
 Network_Status_t networkStatus = NONE;
 
 typedef enum {
-  SCREEN_ON_BRT_RESTRICT,
   SCREEN_ON_BRT_MAX,
+  SCREEN_ON_BRT_RESTRICT1,
+  SCREEN_ON_BRT_RESTRICT2,
+  SCREEN_ON_MANUAL,
   SCREEN_OFF
 } Screen_Status_t;
 Screen_Status_t screenStatus = SCREEN_ON_BRT_MAX;
@@ -78,13 +82,14 @@ static lv_obj_t *slider_brightness;
 static lv_obj_t *label_slider_brightness_value;
 static lv_obj_t *label_exec_msg;
 
-static int16_t tft_max_brightness_value = 0;
+static int16_t tft_max_brightness_value = 127;
 static int foundNetworks = 0;
 unsigned long networkTimeout = 10 * 1000;
 String ssidName, ssidPW;
 
-TaskHandle_t ntScanTaskHandler, ntConnectTaskHandler;
+TaskHandle_t ntScanTaskHandler, ntConnectTaskHandler, lcdSleepTaskHandler;
 std::vector<String> foundWifiList;
+unsigned long lastTouchTime = millis();
 
 
 // Variables for touch x,y
@@ -131,6 +136,7 @@ void setup(void)
   buildSettings();
   tryPreviousNetwork();
 
+  LCDSleepTask();
 }
 
 void loop()
@@ -175,7 +181,21 @@ void touchpad_read(lv_indev_drv_t * indev_driver, lv_indev_data_t * data)
     data->point.x = touchX;
     data->point.y = touchY;
 
-    // printf("Touch (x,y): (%03d,%03d)\n",touchX,touchY );
+    // last touch time memory
+    lastTouchTime = millis();
+    if (screenStatus != SCREEN_ON_BRT_MAX && screenStatus != SCREEN_ON_MANUAL) {
+      screenStatus = SCREEN_ON_BRT_MAX;
+      printf("SCREEN_ON_BRT_MAX val.%d\n", tft_max_brightness_value);
+      tft.setBrightness((uint8_t)tft_max_brightness_value);
+      // ui label + slider
+      char buf1[8];
+      lv_snprintf(buf1, sizeof(buf1), "%d/%d", (int)tft_max_brightness_value, (int)tft_max_brightness_value);
+      lv_label_set_text(label_brt_value, (const char *)buf1);
+      set_slider_text_value(label_slider_brightness_value, 100, (char *)slider_brightness_prefix, (char *)slider_brightness_postfix);
+      lv_slider_set_value(slider_brightness, 100, LV_ANIM_OFF);
+      //printf("Touch (x,y): (%03d,%03d)\n",touchX,touchY );
+    }
+
   }
 }
 
@@ -345,9 +365,8 @@ void slider_event_brightness(lv_event_t *e) {
     lv_snprintf(buf1, sizeof(buf1), "%d/%d", (int)val2, (int)tft_max_brightness_value);
     lv_label_set_text(label_brt_value, (const char *)buf1);
     set_slider_text_value(label_slider_brightness_value, val1, (char *)slider_brightness_prefix, (char *)slider_brightness_postfix);
-    // char buf2[8];
-    // lv_snprintf(buf2, sizeof(buf2), "%d", val2);
-    // lv_label_set_text(label_hum_value, buf2);
+    
+    screenStatus = SCREEN_ON_MANUAL;
   }
 }
 
@@ -377,6 +396,19 @@ void timerForNetwork(lv_timer_t *timer) {
 
       showingFoundWiFiList();
       updateLocalTime();
+
+      //printf("ESP-Now Init ...");
+      //WiFi.mode(WIFI_STA);
+      //WiFi.disconnect();
+
+      //if (esp_now_init() == ESP_OK) {
+      //  printf("Success\n");
+      //  networkStatus = NETWORK_ESP_MODE;
+      //} else {
+      //  printf("Oops!\n");
+      //}
+      //esp_now_register_recv_cb(onReceive);
+
       break;
 
     case NETWORK_CONNECT_FAILED:
@@ -384,6 +416,9 @@ void timerForNetwork(lv_timer_t *timer) {
       popupMsgBox("Oops!", "Please check your wifi password and try again.");
       break;
 
+    //case NETWORK_ESP_MODE:
+    //  networkStatus = NETWORK_ESP_MODE;
+    //  break;
     default:
       break;
   }
@@ -785,6 +820,75 @@ void networkConnector() {
               &ntConnectTaskHandler);
 }
 
+void LCDSleepTask() {
+  xTaskCreate(LCDSleep,
+              "LCDSleep",
+              2048,
+              NULL,
+              1,
+              &lcdSleepTaskHandler);
+  //lcdSleepTaskHandler
+}
+
+void LCDSleep(void *pvParameters) {
+  unsigned long thisTimeDiff = 0;
+
+  while (1) {
+    thisTimeDiff = millis() - lastTouchTime;
+    if (thisTimeDiff > 180000 ) {
+      if (screenStatus != SCREEN_OFF) {
+        int16_t brightness_value =  0;
+        printf("SCREEN_OFF val.%d\n", brightness_value);
+        tft.setBrightness((uint8_t)brightness_value);
+        screenStatus = SCREEN_OFF;
+        // ui label + slider
+        char buf1[8];
+        lv_snprintf(buf1, sizeof(buf1), "%d/%d", (int)brightness_value, (int)tft_max_brightness_value);
+        lv_label_set_text(label_brt_value, (const char *)buf1);
+        set_slider_text_value(label_slider_brightness_value, 0, (char *)slider_brightness_prefix, (char *)slider_brightness_postfix);
+        lv_slider_set_value(slider_brightness, 0, LV_ANIM_OFF);
+      }
+    } else if (thisTimeDiff > 120000 ) {
+      if (screenStatus != SCREEN_ON_BRT_RESTRICT2) {
+        int16_t brightness_value =  1;
+        printf("SCREEN_ON_BRT_RESTRICT2 val.%d\n", brightness_value);
+        tft.setBrightness((uint8_t)brightness_value);
+        screenStatus = SCREEN_ON_BRT_RESTRICT2;
+        // ui label + slider
+        char buf1[8];
+        lv_snprintf(buf1, sizeof(buf1), "%d/%d", (int)brightness_value, (int)tft_max_brightness_value);
+        lv_label_set_text(label_brt_value, (const char *)buf1);
+        set_slider_text_value(label_slider_brightness_value, 1, (char *)slider_brightness_prefix, (char *)slider_brightness_postfix);
+        lv_slider_set_value(slider_brightness, 1, LV_ANIM_OFF);
+      }
+    } else if (thisTimeDiff > 60000 ) {
+      if (screenStatus != SCREEN_ON_BRT_RESTRICT1) {
+        int16_t brightness_value =  int16_t(((int)tft_max_brightness_value * 100 * 20) / 10000);
+        printf("SCREEN_ON_BRT_RESTRICT1 val.%d\n", brightness_value);
+        tft.setBrightness((uint8_t)brightness_value);
+        screenStatus = SCREEN_ON_BRT_RESTRICT1;
+        // ui label + slider
+        char buf1[8];
+        lv_snprintf(buf1, sizeof(buf1), "%d/%d", (int)brightness_value, (int)tft_max_brightness_value);
+        lv_label_set_text(label_brt_value, (const char *)buf1);
+        set_slider_text_value(label_slider_brightness_value, 20, (char *)slider_brightness_prefix, (char *)slider_brightness_postfix);
+        lv_slider_set_value(slider_brightness, 20, LV_ANIM_OFF);
+      }
+    } else if (screenStatus != SCREEN_ON_BRT_MAX && screenStatus != SCREEN_ON_MANUAL) {
+      screenStatus = SCREEN_ON_BRT_MAX;
+      printf("SCREEN_ON_BRT_MAX val.%d\n", tft_max_brightness_value);
+      tft.setBrightness((uint8_t)tft_max_brightness_value);
+      // ui label + slider
+      char buf1[8];
+      lv_snprintf(buf1, sizeof(buf1), "%d/%d", (int)tft_max_brightness_value, (int)tft_max_brightness_value);
+      lv_label_set_text(label_brt_value, (const char *)buf1);
+      set_slider_text_value(label_slider_brightness_value, 100, (char *)slider_brightness_prefix, (char *)slider_brightness_postfix);
+      lv_slider_set_value(slider_brightness, 100, LV_ANIM_OFF);
+    }
+    vTaskDelay(3000);
+  }
+}
+
 void scanWIFITask(void *pvParameters) {
   while (1) {
     foundWifiList.clear();
@@ -807,9 +911,9 @@ void beginWIFITask(void *pvParameters) {
   WiFi.disconnect();
   vTaskDelay(100);
 
-  Serial.print(">WiFi mac:");
-  Serial.println(WiFi.macAddress());
-  printf("WiFi Mac:%s\n",WiFi.macAddress());
+  // Serial.print(">WiFi mac:");
+  // Serial.println(WiFi.macAddress());
+  printf("WiFi Mac:%s\n",WiFi.macAddress().c_str());
 
   WiFi.begin(ssidName.c_str(), ssidPW.c_str());
   while (WiFi.status() != WL_CONNECTED && (millis() - startingTime) < networkTimeout) {
@@ -933,3 +1037,16 @@ void updateLocalTime() {
 }
 
 
+void onReceive(const uint8_t* mac_addr, const uint8_t* data, int data_len) {
+    char macStr[18];
+    snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
+        mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+    printf("\n");
+    printf("Last Packet Recv from: %s\n", macStr);
+    printf("Last Packet Recv Data(%d): ", data_len);
+    for (int i = 0; i < data_len; i++) {
+        printf("%d ", data[i]);
+    }
+    printf("\n");
+
+}
