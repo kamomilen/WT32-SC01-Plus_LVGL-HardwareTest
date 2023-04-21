@@ -1,5 +1,6 @@
 // TF Card on SPI bus
 
+#ifdef TF_SUPPORTED
 //#include <TF.h>
 //#include <SPI.h>
 #include <driver/sdspi_host.h>
@@ -18,7 +19,7 @@ const char *TAG = "tfcard";
 esp_err_t _TF_Mount()
 {
     sdspi_device_config_t device_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-    device_config.host_id = SDSPI_HOST_ID;
+    device_config.host_id = TFSPI_HOST_ID;
     device_config.gpio_cs = TF_CS;
 
     ESP_LOGI(TAG, "Initializing TF card");
@@ -43,7 +44,7 @@ esp_err_t _TF_Mount()
         .quadhd_io_num = -1,
         .max_transfer_sz = 4092,
     };
-    esp_err_t ret = spi_bus_initialize(SDSPI_HOST_ID, &bus_cfg, SDSPI_DEFAULT_DMA);
+    esp_err_t ret = spi_bus_initialize(TFSPI_HOST_ID, &bus_cfg, SDSPI_DEFAULT_DMA);
     //sdmmc_host = _sdmmc_host;
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to initialize bus.");
@@ -177,5 +178,5 @@ esp_err_t _TF_RenameFile(const char *file_from, const char *file_to) {
     }
     return ESP_OK;
 }
-
+#endif
 

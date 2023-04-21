@@ -1,7 +1,7 @@
 
 #pragma once
 
-
+#include <esp_err.h>
 
 #define _rate   44100
 esp_err_t speaker_init();

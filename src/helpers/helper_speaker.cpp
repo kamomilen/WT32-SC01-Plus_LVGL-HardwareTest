@@ -1,14 +1,15 @@
 // https://github.com/riraosan/ESP32_BT-A2DP_Receiver/blob/master/src/Application.h
+#include "common.hpp"
+#ifdef AUDIO_SUPPORTED
 #include <cmath>
 #include <Arduino.h>
 #include <Audio.h>
 #include <driver/i2s.h>
 #include <queue.h>
-#include "common.hpp"
 #include "helpers/helper_speaker.hpp"
 
-Audio audio;
 static i2s_port_t a_i2s_port_t = I2S_NUM_0;
+Audio audio(false, 1, I2S_NUM_0);
 const char *TAG_SP = "speaker";
 
 esp_err_t speaker_init() {
@@ -144,3 +145,5 @@ float fastSin(float theta) {
     auto y = (B  + C * theta) * theta;
     return P * (y * std::abs(y) - y) + y;
 }
+
+#endif

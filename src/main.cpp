@@ -1,29 +1,34 @@
 #include <stdio.h>
 #include <string.h>
 #include <vector>
-#include "time.h"
-#include "WiFi.h"
-//#include <esp_now.h>
+#include <time.h>
+#include <WiFi.h>
 #include <EEPROM.h>
 #include <LovyanGFX.hpp> // main library
 #include <lvgl.h>
 #include "lv_conf.h"
 #include "main.hpp"
-#include "common.hpp"
-#include "helpers/helper_storage.hpp"
-#include "helpers/helper_speaker.hpp"
+#ifdef EPSNOW_SUPPORTED
+  #include "helpers/helper_espnow.hpp"
+#endif
+#ifdef TF_SUPPORTED
+  #include "helpers/helper_storage.hpp"
+#endif
+#ifdef AUDIO_SUPPORTED
+  #include "helpers/helper_speaker.hpp"
+#endif
 #include "helpers/helper_display.hpp"
 
 /*** Enum declaration ***/
 typedef enum {
-  NONE,
+  NETWORK_NONE,
   NETWORK_SEARCHING,
   NETWORK_CONNECTED_POPUP,
   NETWORK_CONNECTED,
   NETWORK_CONNECT_FAILED,
   NETWORK_ESP_MODE
 } Network_Status_t;
-Network_Status_t networkStatus = NONE;
+Network_Status_t networkStatus = NETWORK_NONE;
 
 typedef enum {
   SCREEN_ON_BRT_MAX,
@@ -35,9 +40,14 @@ typedef enum {
 Screen_Status_t screenStatus = SCREEN_ON_BRT_MAX;
 static lv_timer_t *screenLastTouchTime = 0;
 
-static TFCard_Status_t tfcardStatus = TFCARD_UNMOUNT;
-static Speaker_Status_t speakerStatus = Speaker_NONE;
-static audioPlayStatus_t audioPlayStatus = kTypeNull;
+#ifdef TF_SUPPORTED
+  static TFCard_Status_t tfcardStatus = TFCARD_UNMOUNT;
+#endif
+
+#ifdef AUDIO_SUPPORTED
+  static Speaker_Status_t speakerStatus = Speaker_NONE;
+  static audioPlayStatus_t audioPlayStatus = kTypeNull;
+#endif
 //static LGFX tft;
 
 //const char *ntpServer = "ntp.nict.jp";
@@ -87,8 +97,9 @@ static int foundNetworks = 0;
 unsigned long networkTimeout = 10 * 1000;
 String ssidName, ssidPW;
 
-TaskHandle_t ntScanTaskHandler, ntConnectTaskHandler, lcdSleepTaskHandler;
+TaskHandle_t ntScanTaskHandler, ntConnectTaskHandler, lcdSleepTaskHandler, extioTaskHandler;
 std::vector<String> foundWifiList;
+
 unsigned long lastTouchTime = millis();
 
 
@@ -102,8 +113,21 @@ void setup(void)
 
   Serial.begin(115200); /* prepare for possible serial debug */
 
+#ifdef AUDIO_SUPPORTED  // Initialize Speaker
+  if (speakerStatus != Speaker_READY) {
+    printf("[1 - Init] Start.\n");
+    if (speaker_init() != ESP_OK) {
+      printf("[1 - Init] ERR.\n");
+    } else {
+      speakerStatus = Speaker_READY;
+    }
+  }
+#endif
+
   tft.init(); // Initialize LovyanGFX
   lv_init();  // Initialize lvgl
+
+  extio_init(); // Initialize Extended IO 
 
   // Setting display to landscape
   if (tft.width() < tft.height())
@@ -134,16 +158,30 @@ void setup(void)
   buildPWMsgBox();
   buildCustomContents();
   buildSettings();
+#ifdef EPSNOW_SUPPORTED
+  if (espnow_init() == ESP_OK) {
+    networkStatus = NETWORK_ESP_MODE;
+  } else {
+    printf("espnow init error.\n");
+    networkStatus = NETWORK_NONE;
+  }
+#else
   tryPreviousNetwork();
+#endif
 
-  LCDSleepTask();
+#ifdef EXTIO_SUPPORTED
+  ExtIOTest();
+#endif
+  LCDSleep();
 }
 
 void loop()
 {
-  if (speakerStatus == Speaker_READY && audioPlayStatus == kTypeAudio) {
-    playLoopAudio();
-  }
+  #ifdef AUDIO_SUPPORTED
+    if (speakerStatus == Speaker_READY && audioPlayStatus == kTypeAudio) {
+      playLoopAudio();
+    }
+  #endif
   lv_timer_handler(); /* let the GUI do its work */
   delay(5);
 }
@@ -216,6 +254,7 @@ void saveWIFICredentialEEPROM(int flag, String ssidpw) {
   EEPROM.commit();
 }
 
+#ifdef TF_SUPPORTED
 void loadTFCard() {
   switch(tfcardStatus) {
     case TFCARD_UNMOUNT:
@@ -233,6 +272,7 @@ void unloadTFCard() {
       break;
   }
 }
+#endif
 
 void loadWIFICredentialEEPROM() {
   int wifiFlag = EEPROM.readInt(EEPROM_ADDR_WIFI_FLAG);
@@ -288,8 +328,13 @@ void setStyle() {
 
   timeLabel = lv_label_create(statusBar);
   lv_obj_set_size(timeLabel, tft.width() - 50, 30);
-
+#ifdef EPSNOW_SUPPORTED
+  char wifilabel[40];
+  sprintf(wifilabel, "\xEF\x87\xAB (ESP-Now %s)", WiFi.macAddress().c_str());
+  lv_label_set_text(timeLabel, wifilabel);
+#else
   lv_label_set_text(timeLabel, "WiFi Not Connected!    " LV_SYMBOL_CLOSE);
+#endif
   lv_obj_align(timeLabel, LV_ALIGN_LEFT_MID, 8, 4);
 
   settingBtn = lv_btn_create(statusBar);
@@ -305,6 +350,11 @@ void setStyle() {
  void btn_event_cb(lv_event_t *e) {
   lv_event_code_t code = lv_event_get_code(e);
   lv_obj_t *btn = lv_event_get_target(e);
+
+  // sleep mode not working
+  if (screenStatus != SCREEN_ON_BRT_MAX && screenStatus != SCREEN_ON_MANUAL) {
+    return;
+  }
 
   if (code == LV_EVENT_CLICKED) {
     if (btn == settingBtn) {
@@ -338,7 +388,7 @@ void setStyle() {
       } else {
 
         if (ntScanTaskHandler != NULL) {
-          networkStatus = NONE;
+          networkStatus = NETWORK_NONE;
           vTaskDelete(ntScanTaskHandler);
           ntScanTaskHandler = NULL;
           lv_timer_del(timer);
@@ -346,21 +396,28 @@ void setStyle() {
         }
 
         if (WiFi.status() == WL_CONNECTED) {
-          WiFi.disconnect(true);
+          WiFi.disconnect(true, true);
+          vTaskDelay(100);
           lv_label_set_text(timeLabel, "WiFi Not Connected!    " LV_SYMBOL_CLOSE);
         }
       }
     }
   }
 }
+
 void slider_event_brightness(lv_event_t *e) {
   lv_event_code_t code = lv_event_get_code(e);
   lv_obj_t * target = lv_event_get_target(e);
+  // sleep mode not working
+  if (screenStatus != SCREEN_ON_BRT_MAX && screenStatus != SCREEN_ON_MANUAL) {
+    return;
+  }
+
   if(code == LV_EVENT_VALUE_CHANGED) {
     int16_t val1 = lv_slider_get_value(target);
     int16_t val2 =  int16_t(((int)tft_max_brightness_value * 100 * (int)val1) / 10000);
     tft.setBrightness((uint8_t)val2);
-    //tft.setBrightness((uint8_t)val);
+
     char buf1[8];
     lv_snprintf(buf1, sizeof(buf1), "%d/%d", (int)val2, (int)tft_max_brightness_value);
     lv_label_set_text(label_brt_value, (const char *)buf1);
@@ -396,19 +453,6 @@ void timerForNetwork(lv_timer_t *timer) {
 
       showingFoundWiFiList();
       updateLocalTime();
-
-      //printf("ESP-Now Init ...");
-      //WiFi.mode(WIFI_STA);
-      //WiFi.disconnect();
-
-      //if (esp_now_init() == ESP_OK) {
-      //  printf("Success\n");
-      //  networkStatus = NETWORK_ESP_MODE;
-      //} else {
-      //  printf("Oops!\n");
-      //}
-      //esp_now_register_recv_cb(onReceive);
-
       break;
 
     case NETWORK_CONNECT_FAILED:
@@ -416,9 +460,6 @@ void timerForNetwork(lv_timer_t *timer) {
       popupMsgBox("Oops!", "Please check your wifi password and try again.");
       break;
 
-    //case NETWORK_ESP_MODE:
-    //  networkStatus = NETWORK_ESP_MODE;
-    //  break;
     default:
       break;
   }
@@ -592,7 +633,12 @@ void button1_event_handler(lv_event_t *e) {
   if (WiFi.status() != WL_CONNECTED) {
     return;
   }
+#ifdef TF_SUPPORTED
   if (tfcardStatus != TFCARD_UNMOUNT) {
+    return;
+  }
+  // sleep mode not working
+  if (screenStatus != SCREEN_ON_BRT_MAX && screenStatus != SCREEN_ON_MANUAL) {
     return;
   }
 
@@ -705,68 +751,59 @@ void button1_event_handler(lv_event_t *e) {
 
     lv_label_set_text(label_exec_msg, "TFCard Test All OK.");
   }
+#endif
 }
 
 void button2_event_handler(lv_event_t *e) {
   lv_event_code_t code = lv_event_get_code(e);
   lv_obj_t *obj = lv_event_get_target(e);
-  if (code == LV_EVENT_CLICKED) {
-    int ret;
-    // if (speakerStatus == Speaker_READY) {
-    //     printf("[1 - Unload] Start.\n");
-    //     speaker_unload();
-    //     speakerStatus = Speaker_NONE;
-    //     printf("[1 - Unload] End.\n");
-    // }
-
-
-    // printf("[2 - Beep] Start.\n");
-    // if (speakerStatus == Speaker_READY) {
-    //   ret = playBeep(2500, 2000, 1000);
-    //   if (ret != ESP_OK) {
-    //     printf("[2 - Beep] Exec ERR.\n");
-    //     return;
-    //   }
-    // } else {
-    //   printf("[2 - Beep] Status Error.\n");
-    //   return;
-    // }
-    // printf("[2 - Beep] OK.\n");
-
-    if (speakerStatus != Speaker_READY) {
-      printf("[1 - Init] Start.\n");
-      ret = speaker_init();
-      if (ret != ESP_OK) {
-        printf("[1 - Init] ERR.\n");
-        return;
-      }
-      speakerStatus = Speaker_READY;
-      printf("[1 - Init] OK.\n");
-
-      printf("[2 - AudioPlay] Start.\n");
-      ret = playDemoAudio();
-      if (ret != ESP_OK) {
-        printf("[2 - AudioPlay] Exec ERR.\n");
-        return;
-      }
-      printf("[2 - AudioPlay] OK.\n");
-    }
-
-    // printf("[3 - Unmount] Start.\n");
-    // ret = speaker_unload();
-    // if (ret != ESP_OK) {
-    //   printf("[3 - Unmount] ERR.\n");
-    //   return;
-    // }
-    // speakerStatus = Speaker_NONE;
-    // printf("[3 - Unmount] OK.\n");
-
-    lv_label_set_text(label_exec_msg, "exec speaker_test. All OK");
+  // sleep mode not working
+  if (screenStatus != SCREEN_ON_BRT_MAX && screenStatus != SCREEN_ON_MANUAL) {
+    return;
   }
+
+  #ifdef AUDIO_SUPPORTED
+    if (code == LV_EVENT_CLICKED) {
+      int ret;
+      if (speakerStatus == Speaker_READY) {
+        // printf("[1 - Init] Start.\n");
+        // ret = speaker_init();
+        // if (ret != ESP_OK) {
+        //   printf("[1 - Init] ERR.\n");
+        //   return;
+        // }
+        // speakerStatus = Speaker_READY;
+        // printf("[1 - Init] OK.\n");
+
+        printf("[2 - AudioPlay] Start.\n");
+        ret = playDemoAudio();
+        if (ret != ESP_OK) {
+          printf("[2 - AudioPlay] Exec ERR.\n");
+          return;
+        }
+        printf("[2 - AudioPlay] OK.\n");
+      }
+
+      // printf("[3 - Unmount] Start.\n");
+      // ret = speaker_unload();
+      // if (ret != ESP_OK) {
+      //   printf("[3 - Unmount] ERR.\n");
+      //   return;
+      // }
+      // speakerStatus = Speaker_NONE;
+      // printf("[3 - Unmount] OK.\n");
+
+      lv_label_set_text(label_exec_msg, "exec speaker_test. All OK");
+   }
+  #endif
 }
 void button3_event_handler(lv_event_t *e) {
   lv_event_code_t code = lv_event_get_code(e);
   lv_obj_t *obj = lv_event_get_target(e);
+  // sleep mode not working
+  if (screenStatus != SCREEN_ON_BRT_MAX && screenStatus != SCREEN_ON_MANUAL) {
+    return;
+  }
   if (code == LV_EVENT_CLICKED) {
 
   }
@@ -774,6 +811,10 @@ void button3_event_handler(lv_event_t *e) {
 void button4_event_handler(lv_event_t *e) {
   lv_event_code_t code = lv_event_get_code(e);
   lv_obj_t *obj = lv_event_get_target(e);
+  // sleep mode not working
+  if (screenStatus != SCREEN_ON_BRT_MAX && screenStatus != SCREEN_ON_MANUAL) {
+    return;
+  }
   if (code == LV_EVENT_CLICKED) {
     ESP.restart();
   }
@@ -782,7 +823,6 @@ void button4_event_handler(lv_event_t *e) {
 void list_event_handler(lv_event_t *e) {
   lv_event_code_t code = lv_event_get_code(e);
   lv_obj_t *obj = lv_event_get_target(e);
-
 
   if (code == LV_EVENT_CLICKED) {
 
@@ -801,7 +841,6 @@ void list_event_handler(lv_event_t *e) {
 /*
  * NETWORK TASKS
  */
-
 void networkScanner() {
   xTaskCreate(scanWIFITask,
               "ScanWIFITask",
@@ -820,73 +859,143 @@ void networkConnector() {
               &ntConnectTaskHandler);
 }
 
-void LCDSleepTask() {
-  xTaskCreate(LCDSleep,
-              "LCDSleep",
+/*
+ * LCD TASKS
+ */
+void LCDSleep() {
+  xTaskCreate(LCDSleepTask,
+              "LCDSleepTask",
               2048,
               NULL,
-              1,
+              5,
               &lcdSleepTaskHandler);
-  //lcdSleepTaskHandler
 }
 
-void LCDSleep(void *pvParameters) {
+void ExtIOTest() {
+  xTaskCreate(ExtIOTestTask,
+              "ExtIOTestTask",
+              2048,
+              NULL,
+              5,
+              &extioTaskHandler);
+}
+
+void extio_init() {
+#ifdef EXTIO_SUPPORTED
+    pinMode( EXT_01, OUTPUT );
+    pinMode( EXT_02, OUTPUT );
+    pinMode( EXT_03, OUTPUT );
+    pinMode( EXT_04, OUTPUT );
+    pinMode( EXT_05, OUTPUT );
+    pinMode( EXT_06, OUTPUT );
+#endif
+}
+
+void ExtIOTestTask(void *pvParameters) {
+#ifdef EXTIO_SUPPORTED
+  try {
+    vTaskDelay(5000);
+
+    // init
+    digitalWrite( EXT_01, LOW );
+    digitalWrite( EXT_02, LOW );
+    digitalWrite( EXT_03, LOW );
+    digitalWrite( EXT_04, LOW );
+    digitalWrite( EXT_05, LOW );
+    digitalWrite( EXT_06, LOW );
+    while (1) {
+      digitalWrite( EXT_01, HIGH );
+      vTaskDelay(50);
+      digitalWrite( EXT_01, LOW );
+      digitalWrite( EXT_02, HIGH );
+      vTaskDelay(50);
+      digitalWrite( EXT_02, LOW );
+      digitalWrite( EXT_03, HIGH );
+      vTaskDelay(50);
+      digitalWrite( EXT_03, LOW );
+      digitalWrite( EXT_04, HIGH );
+      vTaskDelay(50);
+      digitalWrite( EXT_04, LOW );
+      digitalWrite( EXT_05, HIGH );
+      vTaskDelay(50);
+      digitalWrite( EXT_05, LOW );
+      digitalWrite( EXT_06, HIGH );
+      vTaskDelay(50);
+      digitalWrite( EXT_06, LOW );
+      //vTaskDelay(3000);
+    }
+  } catch (char *str) {
+    printf("%d\n", str);
+  }
+  vTaskDelete(extioTaskHandler);
+  extioTaskHandler = NULL;
+#endif
+}
+
+void LCDSleepTask(void *pvParameters) {
   unsigned long thisTimeDiff = 0;
 
-  while (1) {
-    thisTimeDiff = millis() - lastTouchTime;
-    if (thisTimeDiff > 180000 ) {
-      if (screenStatus != SCREEN_OFF) {
-        int16_t brightness_value =  0;
-        printf("SCREEN_OFF val.%d\n", brightness_value);
-        tft.setBrightness((uint8_t)brightness_value);
-        screenStatus = SCREEN_OFF;
+  try {
+    while (1) {
+      thisTimeDiff = millis() - lastTouchTime;
+      if (thisTimeDiff > TFT_BRT_RESTRICT_OFF ) {
+        if (screenStatus != SCREEN_OFF) {
+          int16_t brightness_value =  0;
+          printf("SCREEN_OFF val.%d\n", brightness_value);
+          tft.setBrightness((uint8_t)brightness_value);
+          screenStatus = SCREEN_OFF;
+          // ui label + slider
+          char buf1[8];
+          lv_snprintf(buf1, sizeof(buf1), "%d/%d", (int)brightness_value, (int)tft_max_brightness_value);
+          lv_label_set_text(label_brt_value, (const char *)buf1);
+          set_slider_text_value(label_slider_brightness_value, 0, (char *)slider_brightness_prefix, (char *)slider_brightness_postfix);
+          lv_slider_set_value(slider_brightness, 0, LV_ANIM_OFF);
+        }
+      } else if (thisTimeDiff > TFT_BRT_RESTRICT2 ) {
+        if (screenStatus != SCREEN_ON_BRT_RESTRICT2) {
+          int16_t brightness_value =  1;
+          printf("SCREEN_ON_BRT_RESTRICT2 val.%d\n", brightness_value);
+          tft.setBrightness((uint8_t)brightness_value);
+          screenStatus = SCREEN_ON_BRT_RESTRICT2;
+          // ui label + slider
+          char buf1[8];
+          lv_snprintf(buf1, sizeof(buf1), "%d/%d", (int)brightness_value, (int)tft_max_brightness_value);
+          lv_label_set_text(label_brt_value, (const char *)buf1);
+          set_slider_text_value(label_slider_brightness_value, 1, (char *)slider_brightness_prefix, (char *)slider_brightness_postfix);
+          lv_slider_set_value(slider_brightness, 1, LV_ANIM_OFF);
+        }
+      } else if (thisTimeDiff > TFT_BRT_RESTRICT1 ) {
+        if (screenStatus != SCREEN_ON_BRT_RESTRICT1) {
+          //int16_t brightness_value =  int16_t(((int)tft_max_brightness_value * 100 * 20) / 10000);
+          int16_t brightness_value =  25;
+          printf("SCREEN_ON_BRT_RESTRICT1 val.%d\n", brightness_value);
+          tft.setBrightness((uint8_t)brightness_value);
+          screenStatus = SCREEN_ON_BRT_RESTRICT1;
+          // ui label + slider
+          char buf1[8];
+          lv_snprintf(buf1, sizeof(buf1), "%d/%d", (int)brightness_value, (int)tft_max_brightness_value);
+          lv_label_set_text(label_brt_value, (const char *)buf1);
+          set_slider_text_value(label_slider_brightness_value, 20, (char *)slider_brightness_prefix, (char *)slider_brightness_postfix);
+          lv_slider_set_value(slider_brightness, 20, LV_ANIM_OFF);
+        }
+      } else if (screenStatus != SCREEN_ON_BRT_MAX && screenStatus != SCREEN_ON_MANUAL) {
+        screenStatus = SCREEN_ON_BRT_MAX;
+        printf("SCREEN_ON_BRT_MAX val.%d\n", tft_max_brightness_value);
+        tft.setBrightness((uint8_t)tft_max_brightness_value);
         // ui label + slider
         char buf1[8];
-        lv_snprintf(buf1, sizeof(buf1), "%d/%d", (int)brightness_value, (int)tft_max_brightness_value);
+        lv_snprintf(buf1, sizeof(buf1), "%d/%d", (int)tft_max_brightness_value, (int)tft_max_brightness_value);
         lv_label_set_text(label_brt_value, (const char *)buf1);
-        set_slider_text_value(label_slider_brightness_value, 0, (char *)slider_brightness_prefix, (char *)slider_brightness_postfix);
-        lv_slider_set_value(slider_brightness, 0, LV_ANIM_OFF);
+        set_slider_text_value(label_slider_brightness_value, 100, (char *)slider_brightness_prefix, (char *)slider_brightness_postfix);
+        lv_slider_set_value(slider_brightness, 100, LV_ANIM_OFF);
       }
-    } else if (thisTimeDiff > 120000 ) {
-      if (screenStatus != SCREEN_ON_BRT_RESTRICT2) {
-        int16_t brightness_value =  1;
-        printf("SCREEN_ON_BRT_RESTRICT2 val.%d\n", brightness_value);
-        tft.setBrightness((uint8_t)brightness_value);
-        screenStatus = SCREEN_ON_BRT_RESTRICT2;
-        // ui label + slider
-        char buf1[8];
-        lv_snprintf(buf1, sizeof(buf1), "%d/%d", (int)brightness_value, (int)tft_max_brightness_value);
-        lv_label_set_text(label_brt_value, (const char *)buf1);
-        set_slider_text_value(label_slider_brightness_value, 1, (char *)slider_brightness_prefix, (char *)slider_brightness_postfix);
-        lv_slider_set_value(slider_brightness, 1, LV_ANIM_OFF);
-      }
-    } else if (thisTimeDiff > 60000 ) {
-      if (screenStatus != SCREEN_ON_BRT_RESTRICT1) {
-        int16_t brightness_value =  int16_t(((int)tft_max_brightness_value * 100 * 20) / 10000);
-        printf("SCREEN_ON_BRT_RESTRICT1 val.%d\n", brightness_value);
-        tft.setBrightness((uint8_t)brightness_value);
-        screenStatus = SCREEN_ON_BRT_RESTRICT1;
-        // ui label + slider
-        char buf1[8];
-        lv_snprintf(buf1, sizeof(buf1), "%d/%d", (int)brightness_value, (int)tft_max_brightness_value);
-        lv_label_set_text(label_brt_value, (const char *)buf1);
-        set_slider_text_value(label_slider_brightness_value, 20, (char *)slider_brightness_prefix, (char *)slider_brightness_postfix);
-        lv_slider_set_value(slider_brightness, 20, LV_ANIM_OFF);
-      }
-    } else if (screenStatus != SCREEN_ON_BRT_MAX && screenStatus != SCREEN_ON_MANUAL) {
-      screenStatus = SCREEN_ON_BRT_MAX;
-      printf("SCREEN_ON_BRT_MAX val.%d\n", tft_max_brightness_value);
-      tft.setBrightness((uint8_t)tft_max_brightness_value);
-      // ui label + slider
-      char buf1[8];
-      lv_snprintf(buf1, sizeof(buf1), "%d/%d", (int)tft_max_brightness_value, (int)tft_max_brightness_value);
-      lv_label_set_text(label_brt_value, (const char *)buf1);
-      set_slider_text_value(label_slider_brightness_value, 100, (char *)slider_brightness_prefix, (char *)slider_brightness_postfix);
-      lv_slider_set_value(slider_brightness, 100, LV_ANIM_OFF);
+      vTaskDelay(5000);
     }
-    vTaskDelay(3000);
+  } catch (char *str) {
+    printf("%d\n", str);
   }
+  vTaskDelete(lcdSleepTaskHandler);
+  lcdSleepTaskHandler = NULL;
 }
 
 void scanWIFITask(void *pvParameters) {
@@ -908,11 +1017,9 @@ void beginWIFITask(void *pvParameters) {
 
   unsigned long startingTime = millis();
   WiFi.mode(WIFI_STA);
-  WiFi.disconnect();
+  WiFi.disconnect(true, true);
   vTaskDelay(100);
 
-  // Serial.print(">WiFi mac:");
-  // Serial.println(WiFi.macAddress());
   printf("WiFi Mac:%s\n",WiFi.macAddress().c_str());
 
   WiFi.begin(ssidName.c_str(), ssidPW.c_str());
@@ -1024,29 +1131,18 @@ void updateLocalTime() {
   String hourMinWithSymbol = String(hourMin);
   hourMinWithSymbol += "   ";
   hourMinWithSymbol += LV_SYMBOL_WIFI;
+  #ifdef TF_SUPPORTED
   if (tfcardStatus == TFCARD_MOUNTED) {
     hourMinWithSymbol += "   ";
     hourMinWithSymbol += LV_SYMBOL_SD_CARD;
   }
-  if (speakerStatus == Speaker_READY) {
-    hourMinWithSymbol += "   ";
-    hourMinWithSymbol += LV_SYMBOL_AUDIO;
-    hourMinWithSymbol += " (vol.10/27) ";
-  }
-  lv_label_set_text(timeLabel, hourMinWithSymbol.c_str());
-}
-
-
-void onReceive(const uint8_t* mac_addr, const uint8_t* data, int data_len) {
-    char macStr[18];
-    snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
-        mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
-    printf("\n");
-    printf("Last Packet Recv from: %s\n", macStr);
-    printf("Last Packet Recv Data(%d): ", data_len);
-    for (int i = 0; i < data_len; i++) {
-        printf("%d ", data[i]);
+  #endif
+  #ifdef AUDIO_SUPPORTED
+    if (speakerStatus == Speaker_READY) {
+      hourMinWithSymbol += "   ";
+      hourMinWithSymbol += LV_SYMBOL_AUDIO;
+      hourMinWithSymbol += " (vol.10/27) ";
     }
-    printf("\n");
-
+  #endif
+  lv_label_set_text(timeLabel, hourMinWithSymbol.c_str());
 }
